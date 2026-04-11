@@ -3,20 +3,29 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Horror Animation Studio API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: characters
+    description: Character avatar management
+  - name: templates
+    description: Text overlay templates
+  - name: alerts
+    description: Stream alert configuration
+  - name: presets
+    description: User presets management
+  - name: stream
+    description: Stream overlay events
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +33,341 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /characters:
+    get:
+      operationId: listCharacters
+      tags: [characters]
+      summary: List preset characters
+      responses:
+        "200":
+          description: List of characters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Character"
+    post:
+      operationId: createCharacter
+      tags: [characters]
+      summary: Upload custom character
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCharacterBody"
+      responses:
+        "201":
+          description: Created character
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+
+  /characters/{id}:
+    get:
+      operationId: getCharacter
+      tags: [characters]
+      summary: Get character by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Character
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+    delete:
+      operationId: deleteCharacter
+      tags: [characters]
+      summary: Delete character
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [templates]
+      summary: List text overlay templates
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TextTemplate"
+    post:
+      operationId: createTemplate
+      tags: [templates]
+      summary: Create custom template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateBody"
+      responses:
+        "201":
+          description: Created template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TextTemplate"
+
+  /templates/{id}:
+    get:
+      operationId: getTemplate
+      tags: [templates]
+      summary: Get template by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TextTemplate"
+    delete:
+      operationId: deleteTemplate
+      tags: [templates]
+      summary: Delete template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /templates/random:
+    get:
+      operationId: getRandomTemplate
+      tags: [templates]
+      summary: Get a random template (Surprise Me)
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Random template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TextTemplate"
+
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: List alert configurations
+      responses:
+        "200":
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AlertConfig"
+    post:
+      operationId: createAlert
+      tags: [alerts]
+      summary: Create alert config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAlertBody"
+      responses:
+        "201":
+          description: Created alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertConfig"
+
+  /alerts/{id}:
+    get:
+      operationId: getAlert
+      tags: [alerts]
+      summary: Get alert by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Alert config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertConfig"
+    put:
+      operationId: updateAlert
+      tags: [alerts]
+      summary: Update alert config
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAlertBody"
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertConfig"
+    delete:
+      operationId: deleteAlert
+      tags: [alerts]
+      summary: Delete alert config
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /alerts/trigger:
+    post:
+      operationId: triggerAlert
+      tags: [alerts]
+      summary: Manually trigger a stream alert event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TriggerAlertBody"
+      responses:
+        "200":
+          description: Alert triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertConfig"
+
+  /presets:
+    get:
+      operationId: listPresets
+      tags: [presets]
+      summary: List user presets
+      responses:
+        "200":
+          description: Presets list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Preset"
+    post:
+      operationId: createPreset
+      tags: [presets]
+      summary: Save a preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePresetBody"
+      responses:
+        "201":
+          description: Created preset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preset"
+
+  /presets/{id}:
+    delete:
+      operationId: deletePreset
+      tags: [presets]
+      summary: Delete preset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /stream/stats:
+    get:
+      operationId: getStreamStats
+      tags: [stream]
+      summary: Get stream stats summary
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreamStats"
+
+  /stream/recent-events:
+    get:
+      operationId: getRecentEvents
+      tags: [stream]
+      summary: Get recent stream events
+      responses:
+        "200":
+          description: Recent events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StreamEvent"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +378,278 @@ components:
       required:
         - status
 
+    Character:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        imageUrl:
+          type: string
+        category:
+          type: string
+        isPreset:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - imageUrl
+        - category
+        - isPreset
+        - createdAt
+
+    CreateCharacterBody:
+      type: object
+      properties:
+        name:
+          type: string
+        imageUrl:
+          type: string
+        category:
+          type: string
+      required:
+        - name
+        - imageUrl
+        - category
+
+    TextTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        font:
+          type: string
+        animation:
+          type: string
+        colors:
+          type: array
+          items:
+            type: string
+        glow:
+          type: boolean
+        shadowEffect:
+          type: boolean
+        backgroundStyle:
+          type: string
+        motionBehavior:
+          type: string
+        isPreset:
+          type: boolean
+      required:
+        - id
+        - name
+        - category
+        - font
+        - animation
+        - colors
+        - glow
+        - shadowEffect
+        - backgroundStyle
+        - motionBehavior
+        - isPreset
+
+    CreateTemplateBody:
+      type: object
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        font:
+          type: string
+        animation:
+          type: string
+        colors:
+          type: array
+          items:
+            type: string
+        glow:
+          type: boolean
+        shadowEffect:
+          type: boolean
+        backgroundStyle:
+          type: string
+        motionBehavior:
+          type: string
+      required:
+        - name
+        - category
+        - font
+        - animation
+        - colors
+        - glow
+        - shadowEffect
+        - backgroundStyle
+        - motionBehavior
+
+    AlertConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        eventType:
+          type: string
+        threshold:
+          type: number
+        animation:
+          type: string
+        soundEffect:
+          type: string
+        textTemplate:
+          type: string
+        font:
+          type: string
+        color:
+          type: string
+        duration:
+          type: number
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - eventType
+        - animation
+        - textTemplate
+        - font
+        - color
+        - duration
+        - isActive
+        - createdAt
+
+    CreateAlertBody:
+      type: object
+      properties:
+        name:
+          type: string
+        eventType:
+          type: string
+        threshold:
+          type: number
+        animation:
+          type: string
+        soundEffect:
+          type: string
+        textTemplate:
+          type: string
+        font:
+          type: string
+        color:
+          type: string
+        duration:
+          type: number
+        isActive:
+          type: boolean
+      required:
+        - name
+        - eventType
+        - animation
+        - textTemplate
+        - font
+        - color
+        - duration
+        - isActive
+
+    TriggerAlertBody:
+      type: object
+      properties:
+        eventType:
+          type: string
+        username:
+          type: string
+        value:
+          type: number
+        message:
+          type: string
+      required:
+        - eventType
+        - username
+
+    Preset:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        data:
+          type: object
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - type
+        - data
+        - createdAt
+
+    CreatePresetBody:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        data:
+          type: object
+      required:
+        - name
+        - type
+        - data
+
+    StreamStats:
+      type: object
+      properties:
+        totalAlerts:
+          type: number
+        totalTemplates:
+          type: number
+        totalCharacters:
+          type: number
+        totalPresets:
+          type: number
+        activeAlerts:
+          type: number
+        recentEventCount:
+          type: number
+      required:
+        - totalAlerts
+        - totalTemplates
+        - totalCharacters
+        - totalPresets
+        - activeAlerts
+        - recentEventCount
+
+    StreamEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        eventType:
+          type: string
+        username:
+          type: string
+        value:
+          type: number
+        message:
+          type: string
+        triggeredAt:
+          type: string
+      required:
+        - id
+        - eventType
+        - username
+        - triggeredAt

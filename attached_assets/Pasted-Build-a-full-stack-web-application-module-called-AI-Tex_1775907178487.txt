@@ -1,0 +1,181 @@
+Build a full-stack web application module called “AI Text Overlay Animator Tool”.
+
+This tool is part of a larger streaming platform (Creepy-Zone-AI) and must support real-time animated text overlays for live streaming, images, and video.
+
+========================
+CORE PURPOSE
+========================
+User should be able to:
+- Type simple text (e.g., "Starting Soon")
+- Select a template
+- Instantly get a fully styled + animated text overlay
+- Use it live in OBS or export as media
+
+========================
+NEW FEATURE: TEMPLATE LIBRARY (IMPORTANT)
+========================
+
+Create a built-in system of 100+ PRE-MADE TEMPLATES.
+
+Each template must include:
+- Font style
+- Animation type
+- Color theme
+- Glow / shadow effects
+- Background style (optional)
+- Motion behavior
+
+========================
+TEMPLATE CATEGORIES
+========================
+
+1. Gaming (25 templates)
+- Neon glow kill feed style
+- Esports intro styles
+- Victory / defeat animations
+
+2. Horror (25 templates)
+- Blood drip text
+- Glitch flicker
+- Haunted glow effects
+- Dark cinematic fade-ins
+
+3. Cinematic (20 templates)
+- Movie title style
+- Trailer intro text
+- Slow fade elegant serif fonts
+
+4. Streaming Alerts (15 templates)
+- Starting Soon
+- Be Right Back
+- Stream Ending
+- Subscribe / Follow alerts
+
+5. Social Media Viral (15 templates)
+- TikTok style bold captions
+- Meme text overlays
+- Pop bounce animations
+
+========================
+TEMPLATE ENGINE
+========================
+
+- User inputs ONLY text:
+  Example: "STREAM STARTING SOON"
+
+- Then system:
+  1. Applies selected template
+  2. Automatically assigns font
+  3. Adds animation
+  4. Renders preview instantly
+
+- Must support:
+  - One-click apply
+  - Random template button ("Surprise Me")
+
+========================
+CORE FEATURES (UPDATED)
+========================
+
+1. AI TEXT GENERATOR
+- Suggest styled text variations from input
+
+2. TEMPLATE SELECTOR (NEW)
+- Grid UI showing 100+ templates
+- Search + filter by category
+- Preview animation thumbnails
+
+3. LIVE CANVAS EDITOR
+- Drag & drop text
+- Resize, rotate
+- Layer system
+
+4. ANIMATION ENGINE
+- Predefined animations:
+  - Glitch
+  - Fade
+  - Flicker
+  - Zoom pulse
+  - Fire glow
+  - Shake vibration
+
+5. FONT SYSTEM
+- Trending fonts:
+  - Gaming bold fonts
+  - Horror dripping fonts
+  - Cinematic serif fonts
+  - Neon cyber fonts
+
+6. BACKGROUND SUPPORT
+- Transparent mode
+- Image background upload
+- Video loop background
+
+7. LIVE STREAM MODE
+- OBS virtual camera output
+- Real-time rendering
+
+8. EXPORT OPTIONS
+- PNG (transparent)
+- MP4 animation
+- GIF loop
+
+========================
+UI DESIGN
+========================
+
+- Dark cinematic UI (Creepy-Zone theme)
+- Left panel:
+  Text input + template search
+- Center:
+  Live preview canvas
+- Right panel:
+  Effects + animation controls + export
+
+- Template grid page:
+  Netflix-style UI cards
+  Hover preview animations
+
+========================
+TECH STACK
+========================
+
+Frontend:
+- Next.js (React)
+- Tailwind CSS
+- Fabric.js OR Konva.js (canvas engine)
+- Framer Motion (animations)
+
+Backend:
+- Node.js API routes
+
+Rendering:
+- requestAnimationFrame based engine
+
+========================
+IMPORTANT RULES
+========================
+
+- Must include at least 100 templates in JSON format inside codebase
+- Templates must be reusable objects like:
+  {
+    name: "Neon Glitch Kill Feed",
+    category: "Gaming",
+    font: "...",
+    animation: "glitch",
+    colors: ["#00fff0", "#ff00ff"],
+    glow: true
+  }
+
+- Fully modular architecture
+- No dummy UI — all templates must be functional
+- Instant preview without reload
+
+========================
+EXTRA (FUTURE FEATURES)
+========================
+
+- AI auto-template generator
+- Music beat sync animation
+- Voice-to-text overlay system
+- Stream alert integration (YouTube/Twitch)

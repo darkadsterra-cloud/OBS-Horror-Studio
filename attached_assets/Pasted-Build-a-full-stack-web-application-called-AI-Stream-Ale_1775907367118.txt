@@ -1,0 +1,154 @@
+Build a full-stack web application called “AI Stream Alert & Overlay Engine”.
+
+This system is inspired by TikFinity and is designed for streamers to manage live stream alerts, overlays, animations, and event-based triggers for platforms like TikTok Live, YouTube Live, and Twitch.
+
+========================
+CORE PURPOSE
+========================
+The system listens to live stream events (likes, gifts, follows, donations, subs) and triggers real-time animated overlays and sound alerts for OBS or browser-based streaming.
+
+========================
+CORE FEATURES
+========================
+
+1. LIVE EVENT LISTENER SYSTEM
+- Connect to:
+  - TikTok Live (via API/websocket simulation)
+  - YouTube Live events
+  - Twitch events (optional mock layer)
+- Events:
+  - Follow
+  - Like
+  - Gift / Donation
+  - Subscription
+  - Chat trigger keywords
+
+2. ALERT ENGINE (IMPORTANT)
+- Each event triggers a custom alert
+- Alerts include:
+  - Text animation
+  - Sound effect
+  - Visual effect
+  - Overlay popup
+
+Example:
+- "User gifted 100 coins" → explosion animation + sound + glowing text
+
+3. OVERLAY SYSTEM
+- Real-time browser overlay link for OBS
+- Transparent background support
+- Draggable alert positioning
+
+4. ANIMATION ENGINE
+- Alert animations:
+  - Pop bounce
+  - Glitch flash
+  - Fire explosion
+  - Neon glow pulse
+  - Shake vibration
+  - Cinematic fade in/out
+
+5. SOUND SYSTEM
+- Upload or select sound effects
+- Auto-play on event trigger
+- Volume control per alert type
+
+6. ALERT CUSTOMIZATION PANEL
+- User can create alert rules:
+  IF event = "gift > 100 coins"
+  THEN show "BIG ALERT"
+
+- Customize:
+  - Font
+  - Color
+  - Animation
+  - Duration
+  - Sound
+
+7. TEMPLATE SYSTEM (IMPORTANT)
+- Prebuilt alert templates:
+  - Gaming alerts (neon + fast pop)
+  - Horror alerts (glitch + dark sound)
+  - Cinematic alerts (slow fade + dramatic tone)
+  - Meme alerts (funny bounce + emojis)
+
+- Include at least 50+ templates
+
+8. OBS INTEGRATION
+- Generate overlay URL:
+  /overlay?id=stream123
+- Browser source support for OBS Studio
+
+9. DASHBOARD UI
+- Left panel:
+  Event sources setup
+- Center:
+  Live preview canvas
+- Right panel:
+  Alert customization
+
+========================
+UI DESIGN
+========================
+
+- Dark cinematic UI (Creepy-Zone style)
+- Neon glow accents
+- Glassmorphism panels
+- Real-time activity feed
+
+========================
+TECH STACK
+========================
+
+Frontend:
+- Next.js (React)
+- Tailwind CSS
+- Framer Motion (animations)
+- Canvas/WebGL (for overlays)
+
+Backend:
+- Node.js + Express
+- WebSocket server (real-time events)
+
+Realtime:
+- Socket.io for event streaming
+
+Optional integrations:
+- TikTok Live connector (mock or API-based)
+- YouTube Live API
+- Twitch EventSub
+
+========================
+OVERLAY SYSTEM RULE
+========================
+
+- Must generate a public overlay URL
+- Overlay must run independently in browser
+- Must update in real-time via WebSocket
+- No page refresh allowed
+
+========================
+EVENT TO ALERT MAPPING
+========================
+
+Example rules system:
+
+IF:
+  event_type = "gift"
+  value > 100
+THEN:
+  trigger "BIG_GIFT_ALERT"
+
+IF:
+  event_type = "follow"
+THEN:
+  trigger "WELCOME_ALERT"
+
+========================
+EXTRA FEATURES (FUTURE)
+========================
+
+- AI-generated alert messages
+- Voice reaction system (text-to-speech alerts)
+- Auto highlight clips generator
+- Stream analytics dashboard
