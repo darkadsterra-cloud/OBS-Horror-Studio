@@ -47,7 +47,7 @@ export default function CharacterTransformer() {
 
   const allChars = [
     ...PRESET_CHARS,
-    ...dbChars.map(c => ({ id: c.id, name: c.name, category: c.category, imageUrl: c.imageUrl, isPreset: c.isPreset })),
+    ...dbChars.filter(c => !c.isPreset).map(c => ({ id: c.id, name: c.name, category: c.category, imageUrl: c.imageUrl, isPreset: c.isPreset })),
   ];
 
   const selectedChar = allChars.find(c => c.id === selectedCharId);
@@ -199,7 +199,7 @@ export default function CharacterTransformer() {
 
   const handleUploadChar = async () => {
     if (!uploadUrl || !uploadName) return;
-    await createChar.mutateAsync({ name: uploadName, imageUrl: uploadUrl, category: "Custom" });
+    await createChar.mutateAsync({ data: { name: uploadName, imageUrl: uploadUrl, category: "Custom" } });
     qc.invalidateQueries({ queryKey: ["listCharacters"] });
     setUploadUrl("");
     setUploadName("");
