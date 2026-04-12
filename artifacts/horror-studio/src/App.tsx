@@ -7,6 +7,7 @@ import Dashboard from "@/pages/Dashboard";
 import CharacterTransformer from "@/pages/CharacterTransformer";
 import TextAnimator from "@/pages/TextAnimator";
 import StreamAlerts from "@/pages/StreamAlerts";
+import ImageEditor from "@/pages/ImageEditor";
 import Overlay from "@/pages/Overlay";
 import NotFound from "@/pages/not-found";
 
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/character-transformer" component={() => <Layout><CharacterTransformer /></Layout>} />
       <Route path="/text-animator" component={() => <Layout><TextAnimator /></Layout>} />
       <Route path="/stream-alerts" component={() => <Layout><StreamAlerts /></Layout>} />
+      <Route path="/image-editor" component={() => <Layout><ImageEditor /></Layout>} />
       <Route component={NotFound} />
     </Switch>
   );

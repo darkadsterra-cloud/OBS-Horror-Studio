@@ -12,7 +12,10 @@ A full-stack horror-themed animation studio platform for live streamers and cont
 - Character selection: preset + user-uploaded characters
 - Performance modes: Low (face), Medium (face + upper), High (full body)
 - Visual effects: Glitch, Fire, Aura
-- MediaRecorder-based video recording and download
+- Face landmark detection on mirrored offscreen canvas — fixes correct character orientation
+- MP4 recording (with webm fallback), server-side save to `artifacts/api-server/recordings/`
+- 5-minute recording timer with auto-stop
+- Recordings panel with list and direct download
 
 ### 2. AI Text Overlay Animator (`/text-animator`)
 - 100+ pre-made templates in 5 categories (Gaming, Horror, Cinematic, Streaming, Social)
@@ -30,7 +33,15 @@ A full-stack horror-themed animation studio platform for live streamers and cont
 - Live activity feed
 - Full CRUD for alert configs
 
-### 4. OBS Overlay (`/overlay/:streamId`)
+### 4. Image Editor (`/image-editor`)
+- AI-powered background removal via `@imgly/background-removal` (browser-side, no server needed)
+- Image adjustments: brightness, contrast, saturation, blur
+- Color overlay with blend modes (normal, multiply, screen, overlay, hard-light)
+- Horizontal/vertical flip
+- Drag-and-drop image upload
+- PNG download with transparency preserved
+
+### 5. OBS Overlay (`/overlay/:streamId`)
 - Transparent background page for OBS Browser Source
 - Receives real-time alerts via WebSocket and renders animated overlays
 

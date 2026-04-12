@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { path: "/character-transformer", label: "Character Transform", icon: "◉" },
   { path: "/text-animator", label: "Text Animator", icon: "◎" },
   { path: "/stream-alerts", label: "Stream Alerts", icon: "◆" },
+  { path: "/image-editor", label: "Image Editor", icon: "◧" },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {

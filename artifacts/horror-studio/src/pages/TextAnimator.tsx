@@ -1,7 +1,10 @@
-import { useState, useRef, useEffect } from "react";
-import { useListTemplates, useCreateTemplate, useDeleteTemplate, useGetRandomTemplate } from "@workspace/api-client-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useListTemplates, useCreateTemplate, useDeleteTemplate } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PRESET_TEMPLATES, TEMPLATE_CATEGORIES, type TemplateData } from "@/data/templates";
+
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const MAX_RECORDING_SECS = 5 * 60;
 
 const ANIMATION_CLASSES: Record<string, string> = {
   "glitch": "anim-glitch",
@@ -28,25 +31,24 @@ function TemplatePreview({ template, text }: { template: TemplateData; text: str
   }, []);
 
   const animClass = ANIMATION_CLASSES[template.animation] ?? "";
-  const style: React.CSSProperties = {
-    fontFamily: `'${template.font}', sans-serif`,
-    color: template.colors[0],
-    textShadow: template.glow
-      ? `0 0 10px ${template.colors[0]}, 0 0 20px ${template.colors[0]}88`
-      : template.shadowEffect
-      ? "2px 2px 8px rgba(0,0,0,0.8)"
-      : "none",
-    background: template.backgroundStyle === "dark-gradient"
-      ? "linear-gradient(135deg, #0a0a0a 0%, #1a0a1a 100%)"
-      : "transparent",
-  };
+  const bg = template.backgroundStyle === "dark-gradient"
+    ? "linear-gradient(135deg, #0a0808 0%, #150a1a 100%)"
+    : "#080810";
 
   return (
-    <div className="h-full flex items-center justify-center overflow-hidden" style={style.background ? { background: style.background as string } : {}}>
+    <div className="h-full flex items-center justify-center overflow-hidden" style={{ background: bg }}>
       <span
         key={key}
         className={`${animClass} text-sm font-bold block text-center px-2 leading-tight`}
-        style={{ ...style, background: undefined }}
+        style={{
+          fontFamily: `'${template.font}', sans-serif`,
+          color: template.colors[0],
+          textShadow: template.glow
+            ? `0 0 10px ${template.colors[0]}, 0 0 20px ${template.colors[0]}88`
+            : template.shadowEffect
+              ? "2px 2px 8px rgba(0,0,0,0.8)"
+              : "none",
+        }}
       >
         {text || template.name.toUpperCase()}
       </span>
@@ -80,17 +82,27 @@ function TemplateCard({ template, selected, onClick, text }: {
   );
 }
 
+function formatTime(secs: number) {
+  const m = Math.floor(secs / 60).toString().padStart(2, "0");
+  const s = (secs % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
+
 export default function TextAnimator() {
   const [text, setText] = useState("STARTING SOON");
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateData>(PRESET_TEMPLATES[0]);
   const [activeCategory, setActiveCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [recording, setRecording] = useState(false);
-  const [lastExport, setLastExport] = useState<string | null>(null);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [lastRecordingName, setLastRecordingName] = useState<string | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [savedRecordings, setSavedRecordings] = useState<Array<{ filename: string; size: number; createdAt: string; url: string }>>([]);
+  const [showRecordings, setShowRecordings] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
-  const animTimeRef = useRef(0);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const qc = useQueryClient();
 
   const { data: dbTemplates = [] } = useListTemplates();
@@ -120,7 +132,15 @@ export default function TextAnimator() {
     return catMatch && searchMatch;
   });
 
-  // Canvas rendering
+  const fetchRecordings = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/recordings`);
+      if (r.ok) setSavedRecordings(await r.json());
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchRecordings(); }, [fetchRecordings]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -128,88 +148,216 @@ export default function TextAnimator() {
     if (!ctx) return;
 
     let frameCount = 0;
-    const render = () => {
-      frameCount++;
-      animTimeRef.current = frameCount;
+    let running = true;
 
-      canvas.width = 1280;
-      canvas.height = 360;
+    const render = () => {
+      if (!running) return;
+      frameCount++;
+
+      const W = canvas.offsetWidth || 1280;
+      const H = canvas.offsetHeight || 360;
+
+      if (canvas.width !== W || canvas.height !== H) {
+        canvas.width = W;
+        canvas.height = H;
+      }
+
+      const t = frameCount / 60;
+      const primaryColor = selectedTemplate.colors[0];
+      const secondaryColor = selectedTemplate.colors[1] ?? primaryColor;
+      const anim = selectedTemplate.animation;
 
       if (selectedTemplate.backgroundStyle === "dark-gradient") {
-        const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        const grad = ctx.createLinearGradient(0, 0, W, H);
         grad.addColorStop(0, "#0a0808");
         grad.addColorStop(1, "#150a1a");
         ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, W, H);
       } else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, W, H);
       }
 
-      const primaryColor = selectedTemplate.colors[0];
-      const t = frameCount / 60;
+      const fontSize = Math.min(W * 0.08, H * 0.3);
+      const displayText = text || "HORROR STUDIO";
 
       ctx.save();
-      ctx.font = `bold 72px '${selectedTemplate.font}', Impact, sans-serif`;
+
+      let x = W / 2;
+      let y = H / 2;
+      let alpha = 1;
+      let scale = 1;
+      ctx.font = `bold ${fontSize}px '${selectedTemplate.font}', Impact, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
-      // Apply animation
-      const anim = selectedTemplate.animation;
-      let x = canvas.width / 2;
-      let y = canvas.height / 2;
-      let alpha = 1;
-      let scaleX = 1;
-      let scaleY = 1;
-
       if (anim === "zoom-pulse") {
-        const s = 1 + Math.sin(t * 2) * 0.05;
-        scaleX = scaleY = s;
-      } else if (anim === "neon-pulse" || anim === "fire-glow") {
-        const intensity = (Math.sin(t * 3) + 1) / 2;
+        scale = 1 + Math.sin(t * 3) * 0.12;
         ctx.shadowColor = primaryColor;
-        ctx.shadowBlur = 20 + intensity * 30;
+        ctx.shadowBlur = 20 + Math.sin(t * 3) * 15;
+
+      } else if (anim === "neon-pulse") {
+        const intensity = (Math.sin(t * 4) + 1) / 2;
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 10 + intensity * 60;
+        const flicker = 0.7 + intensity * 0.3;
+        ctx.fillStyle = primaryColor;
+        ctx.globalAlpha = flicker;
+        ctx.fillText(displayText, x, y);
+        ctx.shadowBlur = 40 + intensity * 40;
+        ctx.globalAlpha = intensity * 0.6;
+        ctx.fillText(displayText, x, y);
+        ctx.restore();
+        animFrameRef.current = requestAnimationFrame(render);
+        return;
+
+      } else if (anim === "fire-glow") {
+        ctx.shadowColor = "#ff6600";
+        ctx.shadowBlur = 20 + Math.sin(t * 2) * 20;
+        ctx.fillStyle = primaryColor;
+        ctx.fillText(displayText, x, y);
+        ctx.shadowColor = "#ffcc00";
+        ctx.shadowBlur = 5 + Math.sin(t * 5) * 5;
+        ctx.fillStyle = "#ffcc00";
+        ctx.globalAlpha = 0.4 + Math.random() * 0.2;
+        ctx.fillText(displayText, x, y + Math.sin(t * 8) * 3);
+        const fireGrad = ctx.createLinearGradient(0, H * 0.55, 0, H);
+        fireGrad.addColorStop(0, "transparent");
+        fireGrad.addColorStop(1, "rgba(255,80,0,0.5)");
+        ctx.fillStyle = fireGrad;
+        ctx.globalAlpha = 1;
+        ctx.fillRect(0, H * 0.55, W, H * 0.45);
+        ctx.restore();
+        animFrameRef.current = requestAnimationFrame(render);
+        return;
+
       } else if (anim === "flicker") {
-        alpha = Math.random() > 0.05 ? 1 : 0.3;
+        const flick = Math.random();
+        alpha = flick > 0.1 ? (flick > 0.05 ? 1 : 0.15) : 0;
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 15;
+
       } else if (anim === "shake") {
-        x += (Math.random() - 0.5) * 6;
-        y += (Math.random() - 0.5) * 3;
-      } else if (anim === "float") {
-        y += Math.sin(t * 2) * 10;
+        x += (Math.random() - 0.5) * 12;
+        y += (Math.random() - 0.5) * 6;
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 8;
+
       } else if (anim === "glitch") {
-        if (Math.random() > 0.9) {
-          x += (Math.random() - 0.5) * 8;
-          ctx.fillStyle = Math.random() > 0.5 ? "#ff0066" : "#00fff0";
-          ctx.globalAlpha = 0.5;
-          ctx.fillText(text || "HORROR STUDIO", x + 2, y);
-        }
-      } else if (anim === "blood-drip") {
-        y = canvas.height * 0.3;
-      }
-
-      ctx.globalAlpha = alpha;
-      ctx.transform(scaleX, 0, 0, scaleY, x * (1 - scaleX), y * (1 - scaleY));
-
-      if (selectedTemplate.shadowEffect) {
-        ctx.shadowColor = "rgba(0,0,0,0.8)";
+        ctx.fillStyle = primaryColor;
+        ctx.shadowColor = primaryColor;
         ctx.shadowBlur = 10;
-        ctx.shadowOffsetX = 2;
-        ctx.shadowOffsetY = 2;
-      }
+        ctx.fillText(displayText, x, y);
 
-      ctx.fillStyle = primaryColor;
-      if (selectedTemplate.glow) {
+        if (Math.random() > 0.6) {
+          const sliceY = (Math.random() * H * 0.6) + H * 0.2;
+          const sliceH2 = 4 + Math.random() * 20;
+          const offsetX = (Math.random() - 0.5) * 60;
+          try {
+            const slice = ctx.getImageData(0, sliceY, W, sliceH2);
+            ctx.putImageData(slice, offsetX, sliceY);
+          } catch {}
+        }
+
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = Math.random() > 0.5 ? "#ff0066" : "#00ffff";
+        ctx.fillText(displayText, x + (Math.random() - 0.5) * 8, y);
+        ctx.fillStyle = Math.random() > 0.5 ? "#00ffff" : "#ff0066";
+        ctx.fillText(displayText, x - (Math.random() - 0.5) * 8, y + 2);
+
+        ctx.restore();
+        animFrameRef.current = requestAnimationFrame(render);
+        return;
+
+      } else if (anim === "blood-drip") {
+        y = H * 0.35;
+        ctx.shadowColor = "#cc0000";
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = primaryColor;
+        ctx.fillText(displayText, x, y);
+
+        const dropCount = 5;
+        for (let i = 0; i < dropCount; i++) {
+          const dropX = x - fontSize * 1.5 + i * (fontSize * 3 / (dropCount - 1));
+          const dropOffset = ((t * 80 + i * 37) % (H * 0.65));
+          const dropH = 10 + Math.sin(t + i) * 5;
+          ctx.fillStyle = `rgba(180,0,0,${0.6 + Math.sin(t + i) * 0.3})`;
+          ctx.beginPath();
+          ctx.ellipse(dropX, H * 0.38 + dropOffset, 3, dropH, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+        animFrameRef.current = requestAnimationFrame(render);
+        return;
+
+      } else if (anim === "float") {
+        y = H / 2 + Math.sin(t * 1.5) * (H * 0.1);
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 15 + Math.sin(t * 2) * 10;
+
+      } else if (anim === "bounce") {
+        const bounceAmt = Math.abs(Math.sin(t * 3)) * (H * 0.12);
+        y = H / 2 - bounceAmt;
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 10 + bounceAmt * 0.5;
+
+      } else if (anim === "cinematic-fade") {
+        const cycle = (t % 4) / 4;
+        alpha = cycle < 0.25 ? cycle * 4 : cycle < 0.75 ? 1 : (1 - cycle) * 4;
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 20;
+
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fillRect(0, H * 0.18, W, H * 0.12);
+        ctx.fillRect(0, H * 0.7, W, H * 0.12);
+
+      } else if (anim === "slide-left") {
+        const cycle = (t * 0.5) % 2;
+        x = cycle < 1 ? W + (W / 2) * (1 - cycle * 2) : W / 2;
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 15;
+
+      } else if (anim === "spin-reveal") {
+        const cycle = (t * 0.5) % Math.PI;
+        scale = Math.abs(Math.cos(cycle));
+        alpha = 0.3 + scale * 0.7;
         ctx.shadowColor = primaryColor;
         ctx.shadowBlur = 20;
       }
 
-      ctx.fillText(text || "HORROR STUDIO", x, y);
+      if (selectedTemplate.shadowEffect) {
+        ctx.shadowColor = "rgba(0,0,0,0.9)";
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 3;
+      } else if (selectedTemplate.glow) {
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 25 + Math.sin(t * 2) * 10;
+      }
 
-      // Secondary color stroke
-      if (selectedTemplate.colors.length > 1) {
-        ctx.strokeStyle = selectedTemplate.colors[1];
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 0;
-        ctx.strokeText(text || "HORROR STUDIO", x, y);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = primaryColor;
+
+      if (scale !== 1) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+        ctx.fillText(displayText, 0, 0);
+        if (selectedTemplate.colors.length > 1) {
+          ctx.strokeStyle = secondaryColor;
+          ctx.lineWidth = Math.max(1, fontSize * 0.03);
+          ctx.shadowBlur = 0;
+          ctx.strokeText(displayText, 0, 0);
+        }
+        ctx.restore();
+      } else {
+        ctx.fillText(displayText, x, y);
+        if (selectedTemplate.colors.length > 1) {
+          ctx.strokeStyle = secondaryColor;
+          ctx.lineWidth = Math.max(1, fontSize * 0.03);
+          ctx.shadowBlur = 0;
+          ctx.strokeText(displayText, x, y);
+        }
       }
 
       ctx.restore();
@@ -218,7 +366,10 @@ export default function TextAnimator() {
     };
 
     animFrameRef.current = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animFrameRef.current);
+    return () => {
+      running = false;
+      cancelAnimationFrame(animFrameRef.current);
+    };
   }, [text, selectedTemplate]);
 
   const handleExportPng = () => {
@@ -234,21 +385,51 @@ export default function TextAnimator() {
   const startRecording = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    chunksRef.current = [];
     const stream = canvas.captureStream(30);
-    const mr = new MediaRecorder(stream, { mimeType: "video/webm" });
-    const chunks: Blob[] = [];
-    mr.ondataavailable = e => chunks.push(e.data);
-    mr.onstop = () => {
-      const blob = new Blob(chunks, { type: "video/webm" });
-      setLastExport(URL.createObjectURL(blob));
+
+    const mimeType =
+      MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4" :
+        MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" :
+          "video/webm";
+
+    const mr = new MediaRecorder(stream, { mimeType });
+    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+    mr.onstop = async () => {
+      const blob = new Blob(chunksRef.current, { type: mimeType });
+      const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+      const formData = new FormData();
+      formData.append("video", blob, `text-anim.${ext}`);
+      try {
+        const res = await fetch(`${API_BASE}/api/recordings/upload`, { method: "POST", body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          setLastRecordingName(data.filename);
+          fetchRecordings();
+        }
+      } catch {}
     };
-    mr.start();
+    mr.start(1000);
     setMediaRecorder(mr);
     setRecording(true);
+    setRecordingTime(0);
+    setLastRecordingName(null);
+
+    let elapsed = 0;
+    recordingTimerRef.current = setInterval(() => {
+      elapsed++;
+      setRecordingTime(elapsed);
+      if (elapsed >= MAX_RECORDING_SECS) stopRecording();
+    }, 1000);
   };
 
   const stopRecording = () => {
-    mediaRecorder?.stop();
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    mediaRecorder?.requestData?.();
+    setTimeout(() => mediaRecorder?.stop(), 150);
     setRecording(false);
   };
 
@@ -261,7 +442,6 @@ export default function TextAnimator() {
 
   return (
     <div className="h-full flex overflow-hidden">
-      {/* Left Panel */}
       <aside className="w-64 flex-shrink-0 border-r border-red-900/20 bg-[#050508] flex flex-col overflow-hidden">
         <div className="p-3 border-b border-red-900/20">
           <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-2" style={{ fontFamily: "Cinzel" }}>Text Input</h2>
@@ -280,7 +460,6 @@ export default function TextAnimator() {
           </button>
         </div>
 
-        {/* Category tabs */}
         <div className="p-2 border-b border-red-900/20">
           <div className="flex flex-wrap gap-1">
             {categories.map(cat => (
@@ -298,7 +477,6 @@ export default function TextAnimator() {
           </div>
         </div>
 
-        {/* Search */}
         <div className="p-2 border-b border-zinc-800/30">
           <input
             value={searchQuery}
@@ -308,7 +486,6 @@ export default function TextAnimator() {
           />
         </div>
 
-        {/* Template grid */}
         <div className="flex-1 overflow-y-auto p-2">
           <div className="text-[9px] text-zinc-600 mb-1.5 uppercase tracking-wider">{filtered.length} templates</div>
           <div className="grid grid-cols-2 gap-1.5">
@@ -325,13 +502,14 @@ export default function TextAnimator() {
         </div>
       </aside>
 
-      {/* Main Canvas */}
       <div className="flex-1 flex flex-col p-4">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-black text-purple-400" style={{ fontFamily: "Cinzel" }}>TEXT OVERLAY ANIMATOR</h1>
-          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+          <div className="flex items-center gap-2 text-xs">
             <span className="text-zinc-600">Template:</span>
             <span className="text-zinc-300 font-medium">{selectedTemplate.name}</span>
+            <span className="text-zinc-700">·</span>
+            <span className="text-purple-400 font-mono text-[10px]">{selectedTemplate.animation}</span>
           </div>
         </div>
 
@@ -339,11 +517,16 @@ export default function TextAnimator() {
           className="flex-1 relative rounded border border-purple-900/30 overflow-hidden bg-[#05050a]"
           style={{ boxShadow: "0 0 30px rgba(100,0,200,0.15)" }}
         >
-          <canvas ref={canvasRef} className="w-full h-full object-contain" />
+          <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+          {recording && (
+            <div className="absolute top-2 right-2 flex items-center gap-2 px-3 py-1.5 rounded bg-red-900/50 border border-red-700/60">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs text-red-300 font-mono font-bold">REC {formatTime(recordingTime)}</span>
+            </div>
+          )}
         </div>
 
-        {/* Export buttons */}
-        <div className="flex items-center gap-2 mt-3">
+        <div className="flex items-center gap-2 mt-3 flex-wrap">
           <button
             onClick={handleExportPng}
             className="px-4 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-purple-700/30 transition-colors"
@@ -357,21 +540,44 @@ export default function TextAnimator() {
               : "bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-purple-700/30"
               }`}
           >
-            {recording ? "◼ Stop Record" : "● Record MP4"}
+            {recording ? `◼ Stop Recording` : "● Record"}
           </button>
-          {lastExport && (
-            <a
-              href={lastExport}
-              download="text-animation.webm"
-              className="px-4 py-1.5 rounded text-xs border border-zinc-700/30 text-zinc-400 hover:text-zinc-200 transition-colors"
-            >
-              Download
-            </a>
+          {lastRecordingName && (
+            <span className="text-[10px] text-green-400">✓ Saved: {lastRecordingName}</span>
           )}
+          <button
+            onClick={() => { setShowRecordings(v => !v); fetchRecordings(); }}
+            className="ml-auto px-3 py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
+            📁 Recordings ({savedRecordings.length})
+          </button>
         </div>
+
+        {showRecordings && (
+          <div className="mt-2 rounded border border-zinc-800/40 bg-[#06060c] max-h-36 overflow-y-auto">
+            {savedRecordings.length === 0 ? (
+              <p className="text-xs text-zinc-600 p-3 text-center">No recordings yet</p>
+            ) : (
+              savedRecordings.map(rec => (
+                <div key={rec.filename} className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/30 hover:bg-zinc-800/20">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-zinc-300 truncate">{rec.filename}</div>
+                    <div className="text-[9px] text-zinc-600">{(rec.size / 1024 / 1024).toFixed(1)} MB · {new Date(rec.createdAt).toLocaleString()}</div>
+                  </div>
+                  <a
+                    href={`${API_BASE}${rec.url}`}
+                    download={rec.filename}
+                    className="px-2 py-0.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-400 hover:text-white transition-colors flex-shrink-0"
+                  >
+                    ↓ Download
+                  </a>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Right Panel - Controls */}
       <aside className="w-52 flex-shrink-0 border-l border-red-900/20 bg-[#050508] flex flex-col p-3 overflow-y-auto">
         <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold mb-3" style={{ fontFamily: "Cinzel" }}>Template Info</h2>
         <div className="space-y-2 text-xs">
@@ -414,8 +620,23 @@ export default function TextAnimator() {
         <div className="mt-4 pt-3 border-t border-zinc-800/40">
           <h3 className="text-[9px] text-zinc-600 uppercase tracking-wider mb-2">OBS Usage</h3>
           <p className="text-[10px] text-zinc-600 leading-relaxed">
-            Export PNG for static overlay, or use Record to capture an animated clip for OBS media source.
+            Export PNG for static overlay, or Record to capture an animated clip for OBS media source.
           </p>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-zinc-800/40">
+          <h3 className="text-[9px] text-zinc-600 uppercase tracking-wider mb-2">Animation Tips</h3>
+          <div className="space-y-1">
+            {["glitch", "flicker", "blood-drip"].includes(selectedTemplate.animation) && (
+              <p className="text-[9px] text-red-400/70">Horror effect active — rapid distortion applied</p>
+            )}
+            {["neon-pulse", "fire-glow"].includes(selectedTemplate.animation) && (
+              <p className="text-[9px] text-orange-400/70">Glow pulsing in real-time</p>
+            )}
+            {["zoom-pulse", "bounce", "float"].includes(selectedTemplate.animation) && (
+              <p className="text-[9px] text-purple-400/70">Motion animation active</p>
+            )}
+          </div>
         </div>
       </aside>
     </div>

@@ -5,6 +5,7 @@ import templatesRouter from "./templates";
 import alertsRouter from "./alerts";
 import presetsRouter from "./presets";
 import streamRouter from "./stream";
+import recordingsRouter from "./recordings";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(templatesRouter);
 router.use(alertsRouter);
 router.use(presetsRouter);
 router.use(streamRouter);
+router.use(recordingsRouter);
 
 export default router;
