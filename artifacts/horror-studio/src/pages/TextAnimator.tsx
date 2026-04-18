@@ -1039,12 +1039,15 @@ export default function TextAnimator() {
             </>
           )}
 
-          <button onClick={() => setShowRecordings(v => !v)}
+         <button onClick={() => setShowRecordings(v => !v)}
             className="ml-auto px-3 py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200 transition-colors">
             📁 Recordings ({recordings.length})
           </button>
+          <button onClick={() => setShowOverlays(v => !v)}
+            className={`px-3 py-1.5 rounded text-xs border transition-colors ${showOverlays ? "bg-purple-900/20 border-purple-700/40 text-purple-300" : "bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-purple-700/30"}`}>
+            🎭 Overlays
+          </button>
         </div>
-
         {/* Recordings Panel */}
         {showRecordings && (
           <div className="mt-2 rounded border border-zinc-800/40 bg-[#06060c] max-h-36 overflow-y-auto flex-shrink-0">
@@ -1317,6 +1320,26 @@ export default function TextAnimator() {
           </div>
         </div>
       </aside>
+   {showOverlays && (
+        <div className="absolute bottom-16 left-64 right-60 z-50 rounded border border-purple-900/40 bg-[#06060c]/95 p-3 max-h-64 overflow-y-auto">
+          <div className="flex gap-1 flex-wrap mb-2">
+            {OVERLAY_CATEGORIES.map(cat => (
+              <button key={cat} className="px-2 py-0.5 rounded text-[9px] border border-zinc-700/30 text-zinc-400 hover:text-zinc-200">
+                {cat}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-5 gap-1">
+            {OVERLAY_DEFS.map(o => (
+              <button key={o.id}
+                onClick={() => setActiveOverlayId(activeOverlayId === o.id ? null : o.id)}
+                className={`px-2 py-1 rounded text-[9px] border transition-all ${activeOverlayId === o.id ? "bg-purple-900/40 border-purple-700/40 text-purple-300" : "border-zinc-800/40 text-zinc-500 hover:text-zinc-300"}`}>
+                {o.emoji} {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
