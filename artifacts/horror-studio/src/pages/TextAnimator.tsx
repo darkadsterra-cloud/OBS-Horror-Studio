@@ -247,8 +247,7 @@ export default function TextAnimator() {
   const [recordings, setRecordings]       = useState<Array<{ name: string; url: string; size: number }>>([]);
   const [showRecordings, setShowRecordings] = useState(false);
   const [showOverlays, setShowOverlays] = useState(false);
-  const [activeOverlayId, setActiveOverlayId] = useState<string|null>(null);
-  const mediaRecorderRef  = useRef<MediaRecorder | null>(null);
+  const [activeOverlayCategory, setActiveOverlayCategory] = useState("All");  const mediaRecorderRef  = useRef<MediaRecorder | null>(null);
   const chunksRef         = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -1324,16 +1323,18 @@ export default function TextAnimator() {
         <div className="absolute bottom-16 left-64 right-60 z-50 rounded border border-purple-900/40 bg-[#06060c]/95 p-3 max-h-64 overflow-y-auto">
           <div className="flex gap-1 flex-wrap mb-2">
             {OVERLAY_CATEGORIES.map(cat => (
-              <button key={cat} className="px-2 py-0.5 rounded text-[9px] border border-zinc-700/30 text-zinc-400 hover:text-zinc-200">
-                {cat}
-              </button>
-            ))}
+  <button key={cat}
+    onClick={() => setActiveOverlayCategory(cat)}
+    className={`px-2 py-0.5 rounded text-[9px] border transition-all ${activeOverlayCategory === cat ? "bg-purple-900/40 border-purple-700/40 text-purple-300" : "border-zinc-700/30 text-zinc-400 hover:text-zinc-200"}`}>
+    {cat}
+  </button>
+))}
           </div>
-          <div className="grid grid-cols-5 gap-1">
+          <div className="grid grid-cols-3 gap-1.5"
             {OVERLAY_DEFS.map(o => (
               <button key={o.id}
                 onClick={() => setActiveOverlayId(activeOverlayId === o.id ? null : o.id)}
-                className={`px-2 py-1 rounded text-[9px] border transition-all ${activeOverlayId === o.id ? "bg-purple-900/40 border-purple-700/40 text-purple-300" : "border-zinc-800/40 text-zinc-500 hover:text-zinc-300"}`}>
+                className={`px-2 py-2 rounded text-xs border transition-all ${activeOverlayId === o.id ? "bg-purple-900/40 border-purple-700/40 text-purple-300" : "border-zinc-800/40 text-zinc-500 hover:text-zinc-300"}`}>
                 {o.emoji} {o.label}
               </button>
             ))}
