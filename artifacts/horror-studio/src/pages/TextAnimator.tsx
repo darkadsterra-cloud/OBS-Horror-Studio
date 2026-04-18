@@ -3,6 +3,7 @@ import { useListTemplates, useCreateTemplate, useDeleteTemplate } from "@workspa
 import { useQueryClient } from "@tanstack/react-query";
 import { PRESET_TEMPLATES, TEMPLATE_CATEGORIES, type TemplateData } from "@/data/templates";
 import { OVERLAY_DEFS, OVERLAY_CATEGORIES, OVERLAY_BY_ID, tickParticles, type OverlayDef, type OverlayParticle } from "@/data/overlays";
+
 // ─── Canvas Sizes ───────────────────────────────────────────────────────────
 const CANVAS_PRESETS = [
   { label: "[Standard] 1920×1080 — Full HD",      w: 1920, h: 1080, group: "Standard" },
@@ -78,9 +79,9 @@ const FONT_OPTIONS = [
 interface TextLayer {
   id: string;
   text: string;
-  x: number; // 0-1 fraction of canvas width
-  y: number; // 0-1 fraction of canvas height
-  fontSize: number; // in canvas pixels
+  x: number;
+  y: number;
+  fontSize: number;
   fontFamily: string;
   color: string;
   bold: boolean;
@@ -88,7 +89,7 @@ interface TextLayer {
   underline: boolean;
   align: CanvasTextAlign;
   opacity: number;
-  rotation: number; // radians
+  rotation: number;
   strokeColor: string;
   strokeWidth: number;
   shadowEnabled: boolean;
@@ -98,7 +99,6 @@ interface TextLayer {
   glowColor: string;
   letterSpacing: number;
   animation: string;
-  // Computed width/height after last draw (for hit testing)
   _w: number;
   _h: number;
 }
@@ -192,13 +192,11 @@ function formatTime(secs: number) {
   return `${m}:${s}`;
 }
 
-// ─── Hit test a layer at canvas coords (cx, cy) ─────────────────────────────
 function hitTestLayer(layer: TextLayer, cx: number, cy: number, canvasW: number, canvasH: number): boolean {
   const lx = layer.x * canvasW;
   const ly = layer.y * canvasH;
   const hw = layer._w / 2 + 10;
   const hh = layer._h / 2 + 10;
-  // Transform click point into layer local space (account for rotation)
   const dx = cx - lx;
   const dy = cy - ly;
   const cos = Math.cos(-layer.rotation);
@@ -231,7 +229,6 @@ export default function TextAnimator() {
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(layers[0].id);
   const [newText, setNewText]         = useState("STARTING SOON");
 
-  // Convenience: currently selected layer
   const selectedLayer = layers.find(l => l.id === selectedLayerId) ?? null;
 
   const updateLayer = useCallback((id: string, patch: Partial<TextLayer>) => {
@@ -246,21 +243,30 @@ export default function TextAnimator() {
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordings, setRecordings]       = useState<Array<{ name: string; url: string; size: number }>>([]);
   const [showRecordings, setShowRecordings] = useState(false);
-  const [showOverlays, setShowOverlays] = useState(false);
-  const [activeOverlayCategory, setActiveOverlayCategory] = useState("All");  const mediaRecorderRef  = useRef<MediaRecorder | null>(null);
+
+  // ── Overlays ─────────────────────────────────────────────────────────────
+  const [showOverlays, setShowOverlays]           = useState(false);
+  const [activeOverlayId, setActiveOverlayId]     = useState<string | null>(null);
+  const [activeOverlayCategory, setActiveOverlayCategory] = useState("All");
+
+  const mediaRecorderRef  = useRef<MediaRecorder | null>(null);
   const chunksRef         = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Canvas refs ──────────────────────────────────────────────────────────
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
-  // Store layers in a ref so the render loop always sees latest state
   const layersRef    = useRef<TextLayer[]>(layers);
   useEffect(() => { layersRef.current = layers; }, [layers]);
   const selectedIdRef = useRef<string | null>(selectedLayerId);
   useEffect(() => { selectedIdRef.current = selectedLayerId; }, [selectedLayerId]);
 
-  // ── Drag / resize state (refs, not state — no re-render needed) ──────────
+  // ── Overlay refs ─────────────────────────────────────────────────────────
+  const activeOverlayIdRef    = useRef<string | null>(null);
+  const overlayParticlesRef   = useRef<Record<string, any[]>>({});
+  useEffect(() => { activeOverlayIdRef.current = activeOverlayId; }, [activeOverlayId]);
+
+  // ── Drag / resize / rotate refs ──────────────────────────────────────────
   const dragging       = useRef(false);
   const dragLayerId    = useRef<string | null>(null);
   const dragStartMouse = useRef({ x: 0, y: 0 });
@@ -286,23 +292,23 @@ export default function TextAnimator() {
   ];
 
   const filtered = allTemplates.filter(t => {
-    const catMatch  = activeCategory === "All" || t.category === activeCategory;
+    const catMatch    = activeCategory === "All" || t.category === activeCategory;
     const searchMatch = !searchQuery || t.name.toLowerCase().includes(searchQuery.toLowerCase());
     return catMatch && searchMatch;
   });
 
   const selectTemplate = (tpl: TemplateData) => {
-  setSelectedTemplate(tpl);
-  if (selectedLayerId) {
-    updateLayer(selectedLayerId, {
-      fontFamily: tpl.font,
-      color: tpl.colors[0],
-      animation: tpl.animation,
-      glowEnabled: tpl.glow,
-      shadowEnabled: tpl.shadowEffect,
-    });
-  }
-};
+    setSelectedTemplate(tpl);
+    if (selectedLayerId) {
+      updateLayer(selectedLayerId, {
+        fontFamily: tpl.font,
+        color: tpl.colors[0],
+        animation: tpl.animation,
+        glowEnabled: tpl.glow,
+        shadowEnabled: tpl.shadowEffect,
+      });
+    }
+  };
 
   // ─── Background upload handlers ──────────────────────────────────────────
   const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -338,8 +344,7 @@ export default function TextAnimator() {
     if (bgVidRef.current)   bgVidRef.current.value   = "";
   };
 
-  // ─── Canvas render loop ──────────────────────────────────────────────────
-  // We keep a stable ref to mutable render dependencies to avoid restarting the loop
+  // ─── Stable refs for render loop ────────────────────────────────────────
   const bgImageRef  = useRef(bgImage);
   const bgVideoRef  = useRef(bgVideo);
   const bgFitRef    = useRef(bgObjectFit);
@@ -351,6 +356,7 @@ export default function TextAnimator() {
   useEffect(() => { presetRef.current   = canvasPreset;   }, [canvasPreset]);
   useEffect(() => { templateRef.current = selectedTemplate; }, [selectedTemplate]);
 
+  // ─── Canvas render loop ──────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -394,7 +400,6 @@ export default function TextAnimator() {
       const cy = layer.y * H;
       const anim = layer.animation;
 
-      // Per-animation offsets
       let ox = 0, oy = 0, oscale = 1, oalpha = 1;
       if (anim === "float")   { oy = Math.sin(t * 1.5) * (H * 0.03); }
       if (anim === "bounce")  { oy = -Math.abs(Math.sin(t * 3)) * (H * 0.06); }
@@ -415,7 +420,6 @@ export default function TextAnimator() {
         oalpha = 0.3 + oscale * 0.7;
       }
 
-      // Build font string — bold/italic are part of canvas font
       const weight = layer.bold ? "bold" : "normal";
       const style  = layer.italic ? "italic" : "normal";
       ctx.save();
@@ -429,8 +433,6 @@ export default function TextAnimator() {
       const fs = Math.max(8, layer.fontSize);
       ctx.font = `${style} ${weight} ${fs}px '${layer.fontFamily}', Impact, sans-serif`;
 
-      // Letter spacing — manual rendering if needed
-      // We'll use a helper that respects letterSpacing
       const drawStyledText = (txt: string, x: number, y: number) => {
         if (layer.letterSpacing === 0) {
           if (layer.strokeWidth > 0) {
@@ -441,8 +443,6 @@ export default function TextAnimator() {
           }
           ctx.fillStyle = layer.color;
           ctx.fillText(txt, x, y);
-
-          // Underline
           if (layer.underline) {
             const m = ctx.measureText(txt);
             const w = m.width;
@@ -460,7 +460,6 @@ export default function TextAnimator() {
             ctx.restore();
           }
         } else {
-          // Manual per-char rendering for letter spacing
           const chars = txt.split("");
           let totalW = 0;
           const widths = chars.map(c => { const m = ctx.measureText(c); totalW += m.width + layer.letterSpacing; return m.width; });
@@ -483,7 +482,6 @@ export default function TextAnimator() {
         }
       };
 
-      // Shadow / glow
       if (layer.glowEnabled) {
         ctx.shadowColor = layer.glowColor;
         ctx.shadowBlur  = 30 + Math.sin(t * 2) * 10;
@@ -494,7 +492,6 @@ export default function TextAnimator() {
         ctx.shadowOffsetY = 3;
       }
 
-      // Special: glitch — handle separately
       if (anim === "glitch") {
         ctx.fillStyle = layer.color;
         ctx.shadowColor = layer.color; ctx.shadowBlur = 10;
@@ -514,7 +511,6 @@ export default function TextAnimator() {
         return;
       }
 
-      // Blood drip
       if (anim === "blood-drip") {
         drawStyledText(layer.text, 0, 0);
         const approxW = fs * layer.text.length * 0.55;
@@ -531,7 +527,6 @@ export default function TextAnimator() {
         return;
       }
 
-      // Fire glow
       if (anim === "fire-glow") {
         ctx.shadowColor = "#ff6600"; ctx.shadowBlur = 20 + Math.sin(t * 2) * 20;
         drawStyledText(layer.text, 0, 0);
@@ -543,7 +538,6 @@ export default function TextAnimator() {
         return;
       }
 
-      // Neon pulse
       if (anim === "neon-pulse") {
         const intensity = (Math.sin(t * 4) + 1) / 2;
         ctx.shadowColor = layer.color; ctx.shadowBlur = 10 + intensity * 60;
@@ -555,20 +549,16 @@ export default function TextAnimator() {
         return;
       }
 
-      // Default draw
       drawStyledText(layer.text, 0, 0);
 
-      // Measure and store dimensions for hit testing (no ctx state pollution)
       const measured = ctx.measureText(layer.text);
       const tw = measured.width + Math.max(0, layer.letterSpacing) * layer.text.length;
       const th = fs * 1.4;
       ctx.restore();
 
-      // Mutate layer dims (outside save/restore to avoid issues)
       layer._w = tw;
       layer._h = th;
 
-      // ── Selection handles ────────────────────────────────────────────────
       if (layer.id === selectedIdRef.current) {
         const hw = tw / 2 + 10;
         const hh = th / 2 + 10;
@@ -580,7 +570,6 @@ export default function TextAnimator() {
         ctx.setLineDash([5, 3]);
         ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
         ctx.setLineDash([]);
-        // Corner handles
         const corners = [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]];
         corners.forEach(([hx, hy]) => {
           ctx.fillStyle = "#fff";
@@ -588,7 +577,6 @@ export default function TextAnimator() {
           ctx.lineWidth = 1.5;
           ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         });
-        // Rotation handle
         ctx.strokeStyle = "rgba(255,60,60,0.6)";
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(0, -hh); ctx.lineTo(0, -hh - 25); ctx.stroke();
@@ -609,18 +597,27 @@ export default function TextAnimator() {
       if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
 
       drawBg(W, H);
+
+      // ── Draw active overlay ──────────────────────────────────────────────
+      if (activeOverlayIdRef.current) {
+        const def = OVERLAY_BY_ID[activeOverlayIdRef.current];
+        if (def) {
+          if (!overlayParticlesRef.current[activeOverlayIdRef.current]) {
+            overlayParticlesRef.current[activeOverlayIdRef.current] = def.initParticles(W, H);
+          }
+          def.draw(ctx, W, H, t, overlayParticlesRef.current[activeOverlayIdRef.current]);
+        }
+      }
+
       layersRef.current.forEach(layer => drawLayer(layer, W, H, t));
       animFrameRef.current = requestAnimationFrame(render);
     };
 
     animFrameRef.current = requestAnimationFrame(render);
     return () => { running = false; cancelAnimationFrame(animFrameRef.current); };
-  // Only restart loop when preset changes (canvas dimensions change)
-  // Everything else uses refs
   }, [canvasPreset]);
 
   // ─── Canvas mouse interactions ───────────────────────────────────────────
-  // Convert mouse event to canvas coordinates
   const toCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement> | MouseEvent) => {
     const canvas = canvasRef.current!;
     const rect   = canvas.getBoundingClientRect();
@@ -639,14 +636,12 @@ export default function TextAnimator() {
     const W = canvasPreset.w;
     const H = canvasPreset.h;
 
-    // Check if clicking rotation handle of selected layer first
     if (selectedLayerId) {
       const sel = layersRef.current.find(l => l.id === selectedLayerId);
       if (sel) {
         const cx = sel.x * W;
         const cy = sel.y * H;
         const hh = sel._h / 2 + 10;
-        // Rotation handle pos (in canvas space, accounting for rotation)
         const rotHandleX = cx + Math.cos(sel.rotation - Math.PI / 2) * (hh + 25);
         const rotHandleY = cy + Math.sin(sel.rotation - Math.PI / 2) * (hh + 25);
         if (Math.hypot(x - rotHandleX, y - rotHandleY) < 12) {
@@ -656,11 +651,10 @@ export default function TextAnimator() {
           rotateStartRot.current   = sel.rotation;
           return;
         }
-        // Check corner handles (resize by dragging bottom-right)
         const hw = sel._w / 2 + 10;
         const cos = Math.cos(sel.rotation);
         const sin = Math.sin(sel.rotation);
-        const brX = cx + (hw  * cos - hh  * sin);  // bottom-right corner (approx)
+        const brX = cx + (hw  * cos - hh  * sin);
         const brY = cy + (hw  * sin + hh  * cos);
         if (Math.hypot(x - brX, y - brY) < 14) {
           resizing.current      = true;
@@ -672,7 +666,6 @@ export default function TextAnimator() {
       }
     }
 
-    // Hit test all layers (topmost first)
     const hit = [...layersRef.current].reverse().find(l => hitTestLayer(l, x, y, W, H));
     if (hit) {
       setSelectedLayerId(hit.id);
@@ -721,7 +714,7 @@ export default function TextAnimator() {
     return () => { window.removeEventListener("mousemove", onMouseMove); window.removeEventListener("mouseup", onMouseUp); };
   }, [canvasPreset, updateLayer]);
 
-  // ─── Add new text layer ──────────────────────────────────────────────────
+  // ─── Add / delete layer ──────────────────────────────────────────────────
   const addLayer = () => {
     const layer = makeLayer({
       text: newText || "TEXT",
@@ -750,8 +743,6 @@ export default function TextAnimator() {
   };
 
   // ─── Recording ───────────────────────────────────────────────────────────
-  // FIX: We wait 500ms for the animation loop to be in full swing before
-  // starting MediaRecorder, so early frames are never blank/missing.
   const startRecording = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -775,7 +766,6 @@ export default function TextAnimator() {
       a.href = url; a.download = name; a.click();
     };
 
-    // FIX: short delay so animation renders a few frames before recording starts
     setTimeout(() => {
       mr.start(250);
       mediaRecorderRef.current = mr;
@@ -804,12 +794,7 @@ export default function TextAnimator() {
 
   const handleSurpriseMe = () => selectTemplate(allTemplates[Math.floor(Math.random() * allTemplates.length)]);
   const categories = ["All", ...TEMPLATE_CATEGORIES];
-
-  // ─── Derived canvas preview aspect ratio ────────────────────────────────
-  // The wrapper uses CSS aspect-ratio so the preview box always matches the
-  // selected format (e.g. 1080×1920 shows as portrait, 1920×1080 as landscape).
   const previewAspectRatio = `${canvasPreset.w} / ${canvasPreset.h}`;
-
   const sl = selectedLayer;
 
   // ─── JSX ─────────────────────────────────────────────────────────────────
@@ -819,7 +804,6 @@ export default function TextAnimator() {
       {/* ── Left Sidebar ─────────────────────────────────────────────────── */}
       <aside className="w-64 flex-shrink-0 border-r border-red-900/20 bg-[#050508] flex flex-col overflow-hidden">
 
-        {/* Text Input + Add Layer */}
         <div className="p-3 border-b border-red-900/20">
           <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-2" style={{ fontFamily: "Cinzel" }}>
             Text Input
@@ -958,12 +942,7 @@ export default function TextAnimator() {
           )}
         </div>
 
-        {/* ── Canvas Preview ────────────────────────────────────────────────
-             KEY FIX: wrapper uses CSS aspect-ratio matching the selected preset,
-             and a max-height so it never overflows the center column.
-             The <canvas> inside fills 100% width/height via CSS while its actual
-             pixel dimensions are set in the render loop (canvas.width/height).
-        ─────────────────────────────────────────────────────────────────── */}
+        {/* Canvas Preview */}
         <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0">
           <div
             className="relative rounded border border-purple-900/30 overflow-hidden bg-[#05050a]"
@@ -1005,7 +984,6 @@ export default function TextAnimator() {
             {recording ? `◼ Stop  ${formatTime(recordingTime)}` : "● Record"}
           </button>
 
-          {/* Image Upload */}
           <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
           <button onClick={() => bgFileRef.current?.click()}
             className={`px-3 py-1.5 rounded text-xs border transition-colors ${bgImage
@@ -1014,7 +992,6 @@ export default function TextAnimator() {
             🖼 {bgImage ? "BG: Image" : "Upload Image"}
           </button>
 
-          {/* Video Upload — NEW */}
           <input ref={bgVidRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload} />
           <button onClick={() => bgVidRef.current?.click()}
             className={`px-3 py-1.5 rounded text-xs border transition-colors ${bgVideo
@@ -1038,15 +1015,18 @@ export default function TextAnimator() {
             </>
           )}
 
-         <button onClick={() => setShowRecordings(v => !v)}
+          <button onClick={() => setShowRecordings(v => !v)}
             className="ml-auto px-3 py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200 transition-colors">
             📁 Recordings ({recordings.length})
           </button>
           <button onClick={() => setShowOverlays(v => !v)}
-            className={`px-3 py-1.5 rounded text-xs border transition-colors ${showOverlays ? "bg-purple-900/20 border-purple-700/40 text-purple-300" : "bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-purple-700/30"}`}>
+            className={`px-3 py-1.5 rounded text-xs border transition-colors ${showOverlays
+              ? "bg-purple-900/20 border-purple-700/40 text-purple-300"
+              : "bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-purple-700/30"}`}>
             🎭 Overlays
           </button>
         </div>
+
         {/* Recordings Panel */}
         {showRecordings && (
           <div className="mt-2 rounded border border-zinc-800/40 bg-[#06060c] max-h-36 overflow-y-auto flex-shrink-0">
@@ -1065,6 +1045,60 @@ export default function TextAnimator() {
                   </a>
                 </div>
               ))
+            )}
+          </div>
+        )}
+
+        {/* ── Overlays Panel ────────────────────────────────────────────────
+             FIXED: syntax error removed, category filter works,
+             overlay selection toggles activeOverlayId
+        ──────────────────────────────────────────────────────────────────── */}
+        {showOverlays && (
+          <div className="mt-2 rounded border border-purple-900/40 bg-[#06060c]/95 p-3 max-h-64 overflow-y-auto flex-shrink-0">
+            {/* Category pills */}
+            <div className="flex gap-1 flex-wrap mb-3">
+              {OVERLAY_CATEGORIES.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveOverlayCategory(cat)}
+                  className={`px-2 py-0.5 rounded text-[9px] border transition-all ${
+                    activeOverlayCategory === cat
+                      ? "bg-purple-900/40 border-purple-700/40 text-purple-300"
+                      : "border-zinc-700/30 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            {/* Overlay grid */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {OVERLAY_DEFS
+                .filter(o => activeOverlayCategory === "All" || o.category === activeOverlayCategory)
+                .map(o => (
+                  <button
+                    key={o.id}
+                    onClick={() => setActiveOverlayId(prev => prev === o.id ? null : o.id)}
+                    className={`px-2 py-2 rounded text-xs border transition-all ${
+                      activeOverlayId === o.id
+                        ? "bg-purple-900/40 border-purple-700/40 text-purple-200"
+                        : "border-zinc-800/40 text-zinc-400 hover:border-zinc-600/60 hover:text-zinc-200"
+                    }`}
+                  >
+                    {o.emoji} {o.label}
+                  </button>
+                ))
+              }
+            </div>
+            {activeOverlayId && (
+              <div className="mt-2 text-center">
+                <button
+                  onClick={() => setActiveOverlayId(null)}
+                  className="px-3 py-1 rounded bg-red-900/20 border border-red-800/40 text-xs text-red-400 hover:bg-red-900/40 transition-colors"
+                >
+                  ✕ Remove Overlay
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -1114,7 +1148,7 @@ export default function TextAnimator() {
                 </select>
               </div>
 
-              {/* Font Size — FIX: direct number input + slider, no disappearing text */}
+              {/* Font Size */}
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">
                   Font Size: <span className="text-zinc-300">{sl.fontSize}px</span>
@@ -1218,7 +1252,7 @@ export default function TextAnimator() {
                   className="w-full accent-red-600" />
               </div>
 
-              {/* Text Y Position */}
+              {/* Position Y */}
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">
                   Position Y: <span className="text-zinc-300">{Math.round(sl.y * 100)}%</span>
@@ -1319,28 +1353,7 @@ export default function TextAnimator() {
           </div>
         </div>
       </aside>
-   {showOverlays && (
-        <div className="absolute bottom-16 left-64 right-60 z-50 rounded border border-purple-900/40 bg-[#06060c]/95 p-3 max-h-64 overflow-y-auto">
-          <div className="flex gap-1 flex-wrap mb-2">
-            {OVERLAY_CATEGORIES.map(cat => (
-  <button key={cat}
-    onClick={() => setActiveOverlayCategory(cat)}
-    className={`px-2 py-0.5 rounded text-[9px] border transition-all ${activeOverlayCategory === cat ? "bg-purple-900/40 border-purple-700/40 text-purple-300" : "border-zinc-700/30 text-zinc-400 hover:text-zinc-200"}`}>
-    {cat}
-  </button>
-))}
-          </div>
-          <div className="grid grid-cols-3 gap-1.5"
-            {OVERLAY_DEFS.map(o => (
-              <button key={o.id}
-                onClick={() => setActiveOverlayId(activeOverlayId === o.id ? null : o.id)}
-                className={`px-2 py-2 rounded text-xs border transition-all ${activeOverlayId === o.id ? "bg-purple-900/40 border-purple-700/40 text-purple-300" : "border-zinc-800/40 text-zinc-500 hover:text-zinc-300"}`}>
-                {o.emoji} {o.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+
