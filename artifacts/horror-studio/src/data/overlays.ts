@@ -1,4 +1,5 @@
-// overlays.ts — Place at: artifacts/horror-studio/src/data/overlays.ts
+// overlays.ts — Complete with Video Overlay Support & Fixed Parameters
+// Place at: artifacts/horror-studio/src/data/overlays.ts
 
 export interface OverlayParticle {
   x:number; y:number; vx:number; vy:number;
@@ -7,15 +8,16 @@ export interface OverlayParticle {
   type:string; extra?:Record<string,number|string>;
 }
 
-// ── Custom overlay (user uploaded image/gif) ──────────────────────────────
+// ── Custom overlay (user uploaded image/gif/video) ─────────────────────────
 export interface CustomOverlay {
   id: string;
   name: string;
   category: string;
-  dataUrl: string;        // base64 data URL for image/gif
+  dataUrl: string;        // base64 data URL for image/gif/video
   isGif: boolean;
+  isVideo: boolean;       // NEW: Video support
   // render settings
-  count: number;          // number of particles
+  count: number;
   direction: "top"|"bottom"|"left"|"right"|"random";
   sizeMin: number;
   sizeMax: number;
@@ -24,6 +26,7 @@ export interface CustomOverlay {
   alphaMin: number;
   alphaMax: number;
   rotate: boolean;
+  opacity: number;        // NEW: Master opacity for video/image overlay
 }
 
 export interface OverlayDef {
@@ -32,7 +35,6 @@ export interface OverlayDef {
   category: string;
   emoji: string;
   audioType?: string;
-  // editable params
   params: OverlayParams;
   initParticles: (W:number, H:number, params:OverlayParams) => OverlayParticle[];
   draw: (ctx:CanvasRenderingContext2D, W:number, H:number, t:number, ps:OverlayParticle[], params:OverlayParams) => void;
@@ -48,6 +50,7 @@ export interface OverlayParams {
   alphaMin: number;
   alphaMax: number;
   rotate: boolean;
+  opacity: number;        // NEW: Master opacity control
   [key: string]: any;
 }
 
@@ -61,32 +64,69 @@ export const DEFAULT_PARAMS: OverlayParams = {
   alphaMin: 0.6,
   alphaMax: 1.0,
   rotate: true,
+  opacity: 1.0,           // NEW
 };
 
 function rnd(a:number,b:number){return a+Math.random()*(b-a);}
 function rc(p:string[]){return p[Math.floor(Math.random()*p.length)];}
 
-// ── spawn pos based on direction ──────────────────────────────────────────
-function spawnPos(W:number,H:number,dir:string,p:OverlayParticle){
-  if(dir==="top")   {p.x=rnd(0,W);p.y=rnd(-200,-10);p.vx=rnd(-1,1);p.vy=rnd(p.extra?.sp1 as number||1,p.extra?.sp2 as number||4);}
-  else if(dir==="bottom"){p.x=rnd(0,W);p.y=H+rnd(10,100);p.vx=rnd(-1,1);p.vy=-rnd(p.extra?.sp1 as number||1,p.extra?.sp2 as number||4);}
-  else if(dir==="left") {p.x=rnd(-200,-10);p.y=rnd(0,H);p.vx=rnd(p.extra?.sp1 as number||1,p.extra?.sp2 as number||4);p.vy=rnd(-1,1);}
-  else if(dir==="right"){p.x=W+rnd(10,100);p.y=rnd(0,H);p.vx=-rnd(p.extra?.sp1 as number||1,p.extra?.sp2 as number||4);p.vy=rnd(-1,1);}
-  else {p.x=rnd(0,W);p.y=rnd(0,H);p.vx=rnd(-2,2);p.vy=rnd(-2,2);}
+// ── FIXED: spawn pos based on direction with proper speed params ───────────
+function spawnPos(W:number,H:number,dir:string,p:OverlayParticle, speedMin:number, speedMax:number){
+  if(dir==="top")   {
+    p.x=rnd(0,W); 
+    p.y=rnd(-200,-10); 
+    p.vx=rnd(-0.5,0.5); 
+    p.vy=rnd(speedMin, speedMax);
+  }
+  else if(dir==="bottom"){
+    p.x=rnd(0,W); 
+    p.y=H+rnd(10,100); 
+    p.vx=rnd(-0.5,0.5); 
+    p.vy=-rnd(speedMin, speedMax);
+  }
+  else if(dir==="left") {
+    p.x=rnd(-200,-10); 
+    p.y=rnd(0,H); 
+    p.vx=rnd(speedMin, speedMax); 
+    p.vy=rnd(-0.5,0.5);
+  }
+  else if(dir==="right"){
+    p.x=W+rnd(10,100); 
+    p.y=rnd(0,H); 
+    p.vx=-rnd(speedMin, speedMax); 
+    p.vy=rnd(-0.5,0.5);
+  }
+  else {
+    p.x=rnd(0,W); 
+    p.y=rnd(0,H); 
+    p.vx=rnd(-speedMax,speedMax); 
+    p.vy=rnd(-speedMax,speedMax);
+  }
 }
 
+// ── FIXED: Proper tick with direction-based reset ──────────────────────────
 export function tickParticlesDir(ps:OverlayParticle[],W:number,H:number,params:OverlayParams){
   const dir=params.direction;
+  const sm=params.speedMin, sx=params.speedMax;
   ps.forEach(p=>{
-    p.x+=p.vx; p.y+=p.vy; p.rot+=p.vrot;
+    p.x+=p.vx; 
+    p.y+=p.vy; 
+    p.rot+=p.vrot;
     let reset=false;
-    if(dir==="top"   &&(p.y>H+100||p.life<=0)) reset=true;
-    if(dir==="bottom"&&(p.y<-100||p.life<=0))  reset=true;
-    if(dir==="left"  &&(p.x>W+100||p.life<=0)) reset=true;
-    if(dir==="right" &&(p.x<-100||p.life<=0))  reset=true;
-    if(dir==="random"&&p.life<=0)               reset=true;
-    if(reset){p.life=1;spawnPos(W,H,dir,p);}
-    else p.life=Math.max(0,p.life-0.002);
+    const margin=100;
+    
+    if(dir==="top"   && (p.y>H+margin || p.life<=0)) reset=true;
+    if(dir==="bottom"&& (p.y<-margin || p.life<=0))  reset=true;
+    if(dir==="left"  && (p.x>W+margin || p.life<=0)) reset=true;
+    if(dir==="right" && (p.x<-margin || p.life<=0))  reset=true;
+    if(dir==="random"&& p.life<=0)                   reset=true;
+    
+    if(reset){
+      p.life=1;
+      spawnPos(W,H,dir,p,sm,sx);
+    } else {
+      p.life=Math.max(0,p.life-0.002);
+    }
   });
 }
 
@@ -105,13 +145,21 @@ export function tickParticles(ps:OverlayParticle[],W:number,H:number){
   });
 }
 
+// ── FIXED: makeParticles now properly uses params ──────────────────────────
 function makeParticles(W:number,H:number,params:OverlayParams,type:string,colors:string[]):OverlayParticle[]{
   return Array.from({length:params.count},()=>{
-    const p:OverlayParticle={x:0,y:0,vx:0,vy:0,size:rnd(params.sizeMin,params.sizeMax),life:rnd(0,1),maxLife:1,
-      color:rc(colors),alpha:rnd(params.alphaMin,params.alphaMax),rot:rnd(0,Math.PI*2),
-      vrot:params.rotate?rnd(-0.05,0.05):0,type,
-      extra:{sp1:params.speedMin,sp2:params.speedMax}};
-    spawnPos(W,H,params.direction,p);
+    const p:OverlayParticle={
+      x:0,y:0,vx:0,vy:0,
+      size:rnd(params.sizeMin,params.sizeMax),
+      life:rnd(0,1),maxLife:1,
+      color:rc(colors),
+      alpha:rnd(params.alphaMin,params.alphaMax),
+      rot:rnd(0,Math.PI*2),
+      vrot:params.rotate?rnd(-0.05,0.05):0,
+      type,
+      extra:{}
+    };
+    spawnPos(W,H,params.direction,p,params.speedMin,params.speedMax);
     return p;
   });
 }
@@ -441,7 +489,23 @@ export const OVERLAY_DEFS: OverlayDef[] = [
 
 export const OVERLAY_BY_ID: Record<string, OverlayDef> = Object.fromEntries(OVERLAY_DEFS.map(o=>[o.id,o]));
 
-// ─── Custom overlay image draw (for user-uploaded images/GIFs) ────────────
+// ─── Video element cache ───────────────────────────────────────────────────
+const _videoCache: Record<string, HTMLVideoElement> = {};
+
+export function getVideoElement(overlayId: string, dataUrl: string): HTMLVideoElement {
+  if (!_videoCache[overlayId]) {
+    const vid = document.createElement("video");
+    vid.src = dataUrl;
+    vid.loop = true;
+    vid.muted = true;
+    vid.playsInline = true;
+    vid.play().catch(() => {});
+    _videoCache[overlayId] = vid;
+  }
+  return _videoCache[overlayId];
+}
+
+// ─── Custom overlay image/video draw ───────────────────────────────────────
 const _imgCache: Record<string, HTMLImageElement> = {};
 
 export function drawCustomOverlay(
@@ -450,13 +514,6 @@ export function drawCustomOverlay(
   overlay: CustomOverlay,
   particles: OverlayParticle[]
 ) {
-  if (!_imgCache[overlay.id]) {
-    const img = new Image();
-    img.src = overlay.dataUrl;
-    _imgCache[overlay.id] = img;
-  }
-  const img = _imgCache[overlay.id];
-  if (!img.complete || img.naturalWidth === 0) return;
   const params: OverlayParams = {
     count: overlay.count,
     direction: overlay.direction,
@@ -467,14 +524,48 @@ export function drawCustomOverlay(
     alphaMin: overlay.alphaMin,
     alphaMax: overlay.alphaMax,
     rotate: overlay.rotate,
+    opacity: overlay.opacity,
   };
+  
+  // Video overlay handling
+  if (overlay.isVideo) {
+    const vid = getVideoElement(overlay.id, overlay.dataUrl);
+    if (vid.readyState < 2) return;
+    
+    tickParticlesDir(particles, W, H, params);
+    particles.forEach(p => {
+      ctx.save();
+      ctx.globalAlpha = p.alpha * (overlay.opacity || 1);
+      ctx.translate(p.x, p.y);
+      if (overlay.rotate) ctx.rotate(p.rot);
+      const aspect = vid.videoWidth / vid.videoHeight;
+      const h = p.size;
+      const w = h * aspect;
+      ctx.drawImage(vid, -w/2, -h/2, w, h);
+      ctx.restore();
+    });
+    return;
+  }
+  
+  // Image/GIF handling
+  if (!_imgCache[overlay.id]) {
+    const img = new Image();
+    img.src = overlay.dataUrl;
+    _imgCache[overlay.id] = img;
+  }
+  const img = _imgCache[overlay.id];
+  if (!img.complete || img.naturalWidth === 0) return;
+  
   tickParticlesDir(particles, W, H, params);
   particles.forEach(p => {
     ctx.save();
-    ctx.globalAlpha = p.alpha;
+    ctx.globalAlpha = p.alpha * (overlay.opacity || 1);
     ctx.translate(p.x, p.y);
     if (overlay.rotate) ctx.rotate(p.rot);
-    ctx.drawImage(img, -p.size / 2, -p.size / 2, p.size, p.size);
+    const aspect = img.naturalWidth / img.naturalHeight;
+    const h = p.size;
+    const w = h * aspect;
+    ctx.drawImage(img, -w/2, -h/2, w, h);
     ctx.restore();
   });
 }
@@ -487,6 +578,7 @@ export function initCustomParticles(W: number, H: number, overlay: CustomOverlay
     speedMin: overlay.speedMin, speedMax: overlay.speedMax,
     alphaMin: overlay.alphaMin, alphaMax: overlay.alphaMax,
     rotate: overlay.rotate,
+    opacity: overlay.opacity,
   };
   return makeParticles(W, H, params, "custom", ["#ffffff"]);
 }
