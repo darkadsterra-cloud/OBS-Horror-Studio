@@ -366,7 +366,7 @@ export const OVERLAY_DEFS:OverlayDef[]=[
    initParticles:(W,H)=>[{x:W*0.5,y:H*0.42,vx:0,vy:0,size:Math.min(W,H)*0.22,life:1,maxLife:1,color:"",alpha:0.92,rot:0,vrot:0,type:"vampire"}],
    draw(ctx,W,H,t,ps){ps.forEach(p=>{p.x=W*0.5+Math.sin(t*0.4)*W*0.03;p.y=H*0.42+Math.sin(t)*H*0.02;drawVampire(ctx,p.x,p.y,p.size,t);});}},
   {id:"zombie-horde",label:"Zombie Horde",category:"Horror",emoji:"🧟",audioType:"horror",
-   initParticles:(W,H)=>Array.from({length:5},(_, i)=>({x:-100+i*W*0.25,y:H*0.65,vx:rnd(0.3,0.8),vy:0,size:Math.min(W,H)*0.14,life:1,maxLife:1,color:"",alpha:rnd(0.7,0.9),rot:0,vrot:0,type:"zombie"})),
+   initParticles:(W,H)=>Array.from({length:5},(_,i)=>({x:-100+i*W*0.25,y:H*0.65,vx:rnd(0.3,0.8),vy:0,size:Math.min(W,H)*0.14,life:1,maxLife:1,color:"",alpha:rnd(0.7,0.9),rot:0,vrot:0,type:"zombie"})),
    draw(ctx,W,H,t,ps){ps.forEach(p=>{p.x+=p.vx;if(p.x>W+200)p.x=-200;drawZombie(ctx,p.x,p.y,p.size,t+p.x*0.001);});}},
   {id:"demon",label:"Demon",category:"Horror",emoji:"😈",audioType:"horror",
    initParticles:(W,H)=>[{x:W*0.5,y:H*0.42,vx:0,vy:0,size:Math.min(W,H)*0.22,life:1,maxLife:1,color:"",alpha:0.92,rot:0,vrot:0,type:"demon"}],
@@ -376,7 +376,7 @@ export const OVERLAY_DEFS:OverlayDef[]=[
    initParticles:(W,H)=>[{x:W*0.5,y:H*0.45,vx:0,vy:0,size:Math.min(W,H)*0.28,life:1,maxLife:1,color:"",alpha:0.92,rot:0,vrot:0,type:"dragon"}],
    draw(ctx,W,H,t,ps){ps.forEach(p=>{p.x=W*0.5+Math.sin(t*0.4)*W*0.08;p.y=H*0.45+Math.cos(t*0.3)*H*0.04;drawDragon(ctx,p.x,p.y,p.size,t);});}},
   {id:"dragon-army",label:"Dragon Army",category:"Creatures",emoji:"🐲",audioType:"fire",
-   initParticles:(W,H)=>Array.from({length:3},(_, i)=>({x:rnd(W*0.1,W*0.9),y:rnd(H*0.1,H*0.6),vx:rnd(-1,1),vy:rnd(-0.3,0.3),size:Math.min(W,H)*rnd(0.12,0.2),life:1,maxLife:1,color:rc(["#228833","#aa3300","#113388","#660088"]),alpha:0.88,rot:0,vrot:0,type:"dragon"})),
+   initParticles:(W,H)=>Array.from({length:3},(_,i)=>({x:rnd(W*0.1,W*0.9),y:rnd(H*0.1,H*0.6),vx:rnd(-1,1),vy:rnd(-0.3,0.3),size:Math.min(W,H)*rnd(0.12,0.2),life:1,maxLife:1,color:rc(["#228833","#aa3300","#113388","#660088"]),alpha:0.88,rot:0,vrot:0,type:"dragon"})),
    draw(ctx,W,H,t,ps){ps.forEach(p=>{p.x+=p.vx;p.y+=p.vy;if(p.x<-200)p.x=W+200;if(p.x>W+200)p.x=-200;drawDragon(ctx,p.x,p.y,p.size,t+p.x*0.001,p.color||"#228833");});}},
   {id:"godzilla",label:"Godzilla",category:"Creatures",emoji:"🦖",audioType:"horror",
    initParticles:(W,H)=>[{x:W*0.5,y:H*0.5,vx:0,vy:0,size:Math.min(W,H)*0.3,life:1,maxLife:1,color:"",alpha:0.92,rot:0,vrot:0,type:"godzilla"}],
@@ -456,3 +456,8 @@ export const OVERLAY_DEFS:OverlayDef[]=[
    initParticles:(W,H)=>Array.from({length:2},()=>({x:rnd(W*0.2,W*0.8),y:rnd(H*0.2,H*0.8),vx:0,vy:0,size:rnd(60,120),life:1,maxLife:1,color:"#aa00ff",alpha:0.8,rot:0,vrot:0.02,type:"portal"})),
    draw(ctx,W,H,t,ps){ps.forEach(p=>{p.rot+=p.vrot;p.alpha=0.6+Math.sin(t*2+p.x)*0.2;ctx.save();ctx.translate(p.x,p.y);const r=p.size*0.5;for(let l=3;l>=0;l--){ctx.strokeStyle=["#aa00ff","#ff00aa","#00aaff","#ff6600"][l];ctx.lineWidth=6+l*3;ctx.globalAlpha=0.15+l*0.1;ctx.beginPath();ctx.arc(0,0,r+l*8,0,Math.PI*2);ctx.stroke();}ctx.save();ctx.rotate(t*2);for(let i=0;i<8;i++){ctx.strokeStyle=`hsl(${(i/8)*360+t*60},100%,60%)`;ctx.lineWidth=4;ctx.globalAlpha=0.6;ctx.beginPath();ctx.arc(0,0,r*0.75,(i/8)*Math.PI*2,((i+0.6)/8)*Math.PI*2);ctx.stroke();}ctx.restore();const g=ctx.createRadialGradient(0,0,0,0,0,r*0.65);g.addColorStop(0,`hsla(${t*60},80%,15%,0.95)`);g.addColorStop(1,"transparent");ctx.fillStyle=g;ctx.globalAlpha=0.9;ctx.beginPath();ctx.arc(0,0,r*0.65,0,Math.PI*2);ctx.fill();ctx.restore();});}},
 ];
+
+// ─── OVERLAY_BY_ID lookup map ──────────────────────────────────────────────
+export const OVERLAY_BY_ID: Record<string, OverlayDef> = Object.fromEntries(
+  OVERLAY_DEFS.map(o => [o.id, o])
+);
