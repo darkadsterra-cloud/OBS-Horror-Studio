@@ -246,6 +246,8 @@ export default function TextAnimator() {
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordings, setRecordings]       = useState<Array<{ name: string; url: string; size: number }>>([]);
   const [showRecordings, setShowRecordings] = useState(false);
+  const [showOverlays, setShowOverlays] = useState(false);
+  const [activeOverlayId, setActiveOverlayId] = useState<string|null>(null);
   const mediaRecorderRef  = useRef<MediaRecorder | null>(null);
   const chunksRef         = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -323,7 +325,7 @@ export default function TextAnimator() {
     const vid = document.createElement("video");
     vid.src = url;
     vid.loop = true;
-    vid.muted = true;
+    vid.muted = false;
     vid.playsInline = true;
     vid.play();
     setBgVideo(vid);
