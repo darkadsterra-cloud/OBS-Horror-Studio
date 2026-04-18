@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useListTemplates, useCreateTemplate, useDeleteTemplate } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PRESET_TEMPLATES, TEMPLATE_CATEGORIES, type TemplateData } from "@/data/templates";
-
+import { OVERLAY_DEFS, OVERLAY_CATEGORIES, OVERLAY_BY_ID, tickParticles, type OverlayDef, type OverlayParticle } from "@/data/overlays";
 // ─── Canvas Sizes ───────────────────────────────────────────────────────────
 const CANVAS_PRESETS = [
   { label: "[Standard] 1920×1080 — Full HD",      w: 1920, h: 1080, group: "Standard" },
@@ -290,7 +290,18 @@ export default function TextAnimator() {
     return catMatch && searchMatch;
   });
 
-  const selectTemplate = (tpl: TemplateData) => setSelectedTemplate(tpl);
+  const selectTemplate = (tpl: TemplateData) => {
+  setSelectedTemplate(tpl);
+  if (selectedLayerId) {
+    updateLayer(selectedLayerId, {
+      fontFamily: tpl.font,
+      color: tpl.colors[0],
+      animation: tpl.animation,
+      glowEnabled: tpl.glow,
+      shadowEnabled: tpl.shadowEffect,
+    });
+  }
+};
 
   // ─── Background upload handlers ──────────────────────────────────────────
   const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
