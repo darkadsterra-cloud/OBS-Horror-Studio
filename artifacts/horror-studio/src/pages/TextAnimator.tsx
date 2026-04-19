@@ -419,8 +419,8 @@ export default function TextAnimator() {
     setBgImage(null);
     SetBgVideo(null);
     SetBgTransform(DEFAULT_MEDIA_TRANSFORM);
-    If(BgFileRef.current)BgFileRef.current.Value="";
-    If(BgVidRef.current)BgVidRef.current.Value="";
+    if(bgFileRef.current) bgFileRef.current.value="";
+    if(bgVidRef.current) bgVidRef.current.value="";
   };
 
   // Transition Functions
