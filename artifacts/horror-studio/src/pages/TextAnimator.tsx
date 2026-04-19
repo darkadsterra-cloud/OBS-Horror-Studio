@@ -39,7 +39,7 @@ import {
   cleanupResources,
   detectLowPowerMode
 } from "@/data/performance-optimizer";
-import { useDebounce, useThrottle } from "@/hooks/use-debounce";
+
 
 // ─── Canvas Sizes ─────────────────────────────────────────────────────────────
 const CANVAS_PRESETS = [
