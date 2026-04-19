@@ -1,6 +1,4 @@
 {
-  "buildCommand": "cd artifacts/horror-studio && npm install && npm run build",
-  "outputDirectory": "artifacts/horror-studio/dist",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
