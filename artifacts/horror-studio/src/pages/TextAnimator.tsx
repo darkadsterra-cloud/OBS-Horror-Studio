@@ -492,7 +492,7 @@ useEffect(() => {
     try {
       const state = {
         version: 1, canvasPreset,
-        layers: layers.map(({ _w, _h, ...rest }) => rest),
+         layers: layers.map((l) => { const {_w, _h, ...rest} = l; return rest; }),
         activeOverlays, customOverlays, audioLibrary,
       };
       localStorage.setItem("obs-horror-autosave", JSON.stringify(state));
