@@ -10,41 +10,37 @@ import {
   type OverlayDef, type OverlayParticle, type OverlayParams, type CustomOverlay, DEFAULT_PARAMS
 } from "@/data/overlays";
 
-// NEW IMPORTS — Add these after existing imports
-import { 
-  TEXT_TRANSITIONS, 
-  TRANSITION_CATEGORIES, 
-  applyTransition, 
+import {
+  TEXT_TRANSITIONS,
+  TRANSITION_CATEGORIES,
+  applyTransition,
   cleanupTransition,
   TransitionParams,
-  DEFAULT_TRANSITION 
+  DEFAULT_TRANSITION
 } from "@/data/transitions";
 
-import { 
+import {
   type MediaTransform,
-  DEFAULT_MEDIA_TRANSFORM, 
+  DEFAULT_MEDIA_TRANSFORM,
   calculateMediaDrawParams,
   applyMediaTransform,
-  MEDIA_TRANSITIONS 
+  MEDIA_TRANSITIONS
 } from "@/data/media-transform";
 
-import { 
-  useAutoSave, 
-  loadDraft, 
-  exportProjectBackup 
+import {
+  useAutoSave,
+  loadDraft,
+  exportProjectBackup
 } from "@/data/auto-save";
 
-import { 
-  FrameRateController, 
-  VideoBufferManager, 
+import {
+  FrameRateController,
+  VideoBufferManager,
   MemoryMonitor,
   optimizeCanvas,
   cleanupResources,
   detectLowPowerMode
 } from "@/data/performance-optimizer";
-
-// Remove these imports — causing circular dependency
-// import { useDebounce, useThrottle } from "@/hooks/use-debounce";
 
 // Canvas Sizes
 const CANVAS_PRESETS = [
@@ -181,11 +177,11 @@ function hitTest(l:TextLayer,cx:number,cy:number,W:number,H:number):boolean {
   return Math.abs(dx*cos-dy*sin)<=hw && Math.abs(dx*sin+dy*cos)<=hh;
 }
 
-function hitTestOverlay(ov: ActiveOverlay, cx: number, cy: number, W: number, H: number): boolean {
-  const ox = ov.posX * W;
-  const oy = ov.posY * H;
-  const size = Math.min(W, H) * ov.scale * 0.3;
-  return Math.abs(cx - ox) < size && Math.abs(cy - oy) < size;
+function hitTestOverlay(ov:ActiveOverlay,cx:number,cy:number,W:number,H:number):boolean {
+  const ox=ov.posX*W;
+  const oy=ov.posY*H;
+  const size=Math.min(W,H)*ov.scale*0.3;
+  return Math.abs(cx-ox)<size && Math.abs(cy-oy)<size;
 }
 
 export default function TextAnimator() {
@@ -197,70 +193,70 @@ export default function TextAnimator() {
   const [showSizeMenu,setShowSizeMenu]         = useState(false);
 
   // BG
-  const [bgImage,setBgImage]     = useState<HTMLImageElement|null>(null);
-  const [bgVideo,setBgVideo]     = useState<HTMLVideoElement|null>(null);
-  const [bgObjectFit,setBgObjectFit]  = useState<"cover"|"contain"|"fill">("cover");
+  const [bgImage,setBgImage]         = useState<HTMLImageElement|null>(null);
+  const [bgVideo,setBgVideo]         = useState<HTMLVideoElement|null>(null);
+  const [bgObjectFit,setBgObjectFit] = useState<"cover"|"contain"|"fill">("cover");
   const bgFileRef = useRef<HTMLInputElement>(null);
   const bgVidRef  = useRef<HTMLInputElement>(null);
 
   // Media Transform State
-  const [bgTransform, setBgTransform] = useState<MediaTransform>(DEFAULT_MEDIA_TRANSFORM);
-  const [selectedMedia, setSelectedMedia] = useState<"bg-image" | "bg-video" | null>(null);
+  const [bgTransform,setBgTransform]     = useState<MediaTransform>(DEFAULT_MEDIA_TRANSFORM);
+  const [selectedMedia,setSelectedMedia] = useState<"bg-image"|"bg-video"|null>(null);
 
   // Layers
-  const [layers,setLayers]                 = useState<TextLayer[]>([MakeLayer()]);
-  const [selectedLayerId,setSelectedLayerId]  = useState<string|null>(null);
-  const [newText,setNewText]               = useState("STARTING SOON");
+  const [layers,setLayers]                   = useState<TextLayer[]>([MakeLayer()]);
+  const [selectedLayerId,setSelectedLayerId] = useState<string|null>(null);
+  const [newText,setNewText]                 = useState("STARTING SOON");
   const sl = layers.find(l=>l.id===selectedLayerId)??null;
-  const UpdateLayer = useCallback((id:string,patch:Partial<TextLayer>)=>{
+  const updateLayer = useCallback((id:string,patch:Partial<TextLayer>)=>{
     setLayers(prev=>prev.map(l=>l.id===id?{...l,...patch}:l));
   },[]);
 
   // Overlays
-  const [activeOverlays,setActiveOverlays]         = useState<ActiveOverlay[]>([]);
-  const [selectedOverlayInstance,setSelectedOverlayInstance]  = useState<string|null>(null);
-  const [showOverlayPanel,setShowOverlayPanel]     = useState(false);
-  const [overlayCategory,setOverlayCategory]       = useState("All");
-  const [editingOverlay,setEditingOverlay]         = useState<string|null>(null);
-  const [customOverlays,setCustomOverlays]         = useState<CustomOverlay[]>([]);
-  const [showAddCustom,setShowAddCustom]           = useState(false);
-  const [newCustomName,setNewCustomName]           = useState("");
-  const [newCustomCategory,setNewCustomCategory]   = useState("Custom");
+  const [activeOverlays,setActiveOverlays]                   = useState<ActiveOverlay[]>([]);
+  const [selectedOverlayInstance,setSelectedOverlayInstance] = useState<string|null>(null);
+  const [showOverlayPanel,setShowOverlayPanel]               = useState(false);
+  const [overlayCategory,setOverlayCategory]                 = useState("All");
+  const [editingOverlay,setEditingOverlay]                   = useState<string|null>(null);
+  const [customOverlays,setCustomOverlays]                   = useState<CustomOverlay[]>([]);
+  const [showAddCustom,setShowAddCustom]                     = useState(false);
+  const [newCustomName,setNewCustomName]                     = useState("");
+  const [newCustomCategory,setNewCustomCategory]             = useState("Custom");
   const customUploadRef = useRef<HTMLInputElement>(null);
   const overlayParticlesRef = useRef<Record<string,OverlayParticle[]>>({});
-  
+
   const [pendingCustomFile,setPendingCustomFile] = useState<string|null>(null);
   const [pendingIsGif,setPendingIsGif]           = useState(false);
   const [pendingIsVideo,setPendingIsVideo]       = useState(false);
 
   // Transitions
-  const [textTransition, setTextTransition] = useState<string>("none");
-  const [textTransitionParams, setTextTransitionParams] = useState<TransitionParams>(DEFAULT_TRANSITION);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [transitionProgress, setTransitionProgress] = useState(0);
-  const [mediaTransition, setMediaTransition] = useState<string>("none");
-  const [mediaTransitionParams, setMediaTransitionParams] = useState<TransitionParams>(DEFAULT_TRANSITION);
+  const [textTransition,setTextTransition]           = useState<string>("none");
+  const [textTransitionParams,setTextTransitionParams] = useState<TransitionParams>(DEFAULT_TRANSITION);
+  const [isTransitioning,setIsTransitioning]         = useState(false);
+  const [transitionProgress,setTransitionProgress]   = useState(0);
+  const [mediaTransition,setMediaTransition]         = useState<string>("none");
+  const [mediaTransitionParams,setMediaTransitionParams] = useState<TransitionParams>(DEFAULT_TRANSITION);
 
   // Audio Library
-  const [audioLibrary, setAudioLibrary] = useState<AudioLibraryItem[]>([
-    { id: "1", name: "Horror Ambience", type: "horror", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", duration: 120 },
-    { id: "2", name: "Rain Storm", type: "nature", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", duration: 180 },
-    { id: "3", name: "Dark Piano", type: "music", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", duration: 240 },
+  const [audioLibrary,setAudioLibrary] = useState<AudioLibraryItem[]>([
+    { id:"1", name:"Horror Ambience", type:"horror", url:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", duration:120 },
+    { id:"2", name:"Rain Storm",      type:"nature", url:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", duration:180 },
+    { id:"3", name:"Dark Piano",      type:"music",  url:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", duration:240 },
   ]);
-  const [showAudioPanel, setShowAudioPanel] = useState(false);
-  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [ttsText, setTtsText]  = useState("");
-  const [selectedVoice, setSelectedVoice]  = useState("default");
-  const [ttsRate, setTtsRate]  = useState(1);
-  const [ttsPitch, setTtsPitch] = useState(1);
+  const [showAudioPanel,setShowAudioPanel]   = useState(false);
+  const [playingAudio,setPlayingAudio]       = useState<string|null>(null);
+  const audioRef    = useRef<HTMLAudioElement|null>(null);
+  const [ttsText,setTtsText]                 = useState("");
+  const [selectedVoice,setSelectedVoice]     = useState("default");
+  const [ttsRate,setTtsRate]                 = useState(1);
+  const [ttsPitch,setTtsPitch]               = useState(1);
   const audioUploadRef = useRef<HTMLInputElement>(null);
 
   // Recording
-  const [recording,setRecording]     = useState(false);
+  const [recording,setRecording]         = useState(false);
   const [recordingTime,setRecordingTime] = useState(0);
-  const [recordings,setRecordings]   = useState<Array<{name:string;url:string;size:number}>>([]);
-  const [showRecordings,setShowRecordings]  = useState(false);
+  const [recordings,setRecordings]       = useState<Array<{name:string;url:string;size:number}>>([]);
+  const [showRecordings,setShowRecordings] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
   const chunksRef        = useRef<Blob[]>([]);
   const recTimerRef      = useRef<ReturnType<typeof setInterval>|null>(null);
@@ -269,16 +265,16 @@ export default function TextAnimator() {
   const audioSourceRef   = useRef<MediaElementAudioSourceNode|null>(null);
 
   // Performance
-  const fpsControllerRef = useRef(new FrameRateController(60));
-  const videoManagerRef = useRef(new VideoBufferManager(3));
-  const memoryMonitorRef = useRef<MemoryMonitor | null>(null);
-  const [lowPowerMode, setLowPowerMode] = useState(false);
+  const fpsControllerRef  = useRef(new FrameRateController(60));
+  const videoManagerRef   = useRef(new VideoBufferManager(3));
+  const memoryMonitorRef  = useRef<MemoryMonitor|null>(null);
+  const [lowPowerMode,setLowPowerMode] = useState(false);
 
   // Canvas / Render
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const AnimFrameRef = useRef<number>(0);
   const layersRef    = useRef(layers);
-  useEffect(()=>{LayersRef.current=layers;},[layers]);
+  useEffect(()=>{layersRef.current=layers;},[layers]);
   const selectedIdRef = useRef(selectedLayerId);
   useEffect(()=>{selectedIdRef.current=selectedLayerId;},[selectedLayerId]);
   const activeOverlaysRef = useRef(activeOverlays);
@@ -294,10 +290,10 @@ export default function TextAnimator() {
   const bgTransformRef = useRef(bgTransform); useEffect(()=>{bgTransformRef.current=bgTransform;},[bgTransform]);
 
   // Auto Save
-  const getProjectData = useCallback(() => ({
+  const getProjectData = useCallback(()=>({
     version: 2,
     canvasPreset,
-    layers: layers.map(({_w, _h, ...rest}) => rest),
+    layers: layers.map(({_w,_h,...rest})=>rest),
     activeOverlays,
     customOverlays,
     bgColor: "#000000",
@@ -306,8 +302,8 @@ export default function TextAnimator() {
     textTransitionParams,
     bgTransform,
     mediaTransition,
-    thumbnail: canvasRef.current?.toDataURL("Image/jpeg", 0.3)
-  }), [canvasPreset, layers, activeOverlays, customOverlays, audioLibrary, textTransition, textTransitionParams, bgTransform, mediaTransition]);
+    thumbnail: canvasRef.current?.toDataURL("image/jpeg", 0.3)
+  }),[canvasPreset,layers,activeOverlays,customOverlays,audioLibrary,textTransition,textTransitionParams,bgTransform,mediaTransition]);
 
   const { lastSaved, isSaving, saveNow } = useAutoSave(getProjectData, 30000);
 
@@ -318,70 +314,70 @@ export default function TextAnimator() {
     ...PRESET_TEMPLATES,
     ...dbTemplates.map(t=>({id:t.id,name:t.name,category:t.category,font:t.font,animation:t.animation,colors:t.colors as string[],glow:t.glow,shadowEffect:t.shadowEffect,backgroundStyle:t.backgroundStyle,motionBehavior:t.motionBehavior,isPreset:t.isPreset})),
   ];
-  const categories = ["All", ...(Array.isArray(TEMPLATE_CATEGORIES) ? TEMPLATE_CATEGORIES : [])];
-  const filtered = (Array.isArray(allTemplates) ? allTemplates : []).filter(t=>{
-    const catMatch = activeCategory==="All"||t.category===ActiveCategory;
-    const searchMatch = !SearchQuery||t.Name.toLowerCase().includes(SearchQuery.toLowerCase());
-    return CatMatch&&SearchMatch;
+  const categories = ["All",...(Array.isArray(TEMPLATE_CATEGORIES)?TEMPLATE_CATEGORIES:[])];
+  const filtered = (Array.isArray(allTemplates)?allTemplates:[]).filter(t=>{
+    const catMatch   = activeCategory==="All"||t.category===activeCategory;
+    const searchMatch = !searchQuery||t.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return catMatch&&searchMatch;
   });
 
   const selectTemplate = (tpl:TemplateData) => {
     setSelectedTemplate(tpl);
-    if(selectedLayerId) UpdateLayer(selectedLayerId,{color:tpl.colors[0],fontFamily:Tpl.font,Animation:Tpl.animation,glowEnabled:Tpl.glow,shadowEnabled:Tpl.shadowEffect});
+    if(selectedLayerId) updateLayer(selectedLayerId,{color:tpl.colors[0],fontFamily:tpl.font,animation:tpl.animation,glowEnabled:tpl.glow,shadowEnabled:tpl.shadowEffect});
   };
 
   // Performance Init
-  useEffect(() => {
+  useEffect(()=>{
     setLowPowerMode(detectLowPowerMode());
-    
+
     memoryMonitorRef.current = new MemoryMonitor(
-      () => {
+      ()=>{
         console.warn("Memory warning - reducing quality");
         fpsControllerRef.current.setTargetFPS(30);
       },
-      () => {
+      ()=>{
         console.error("Critical memory - emergency cleanup");
         videoManagerRef.current.clear();
-        cleanupResources(VideoManagerRef.current, [], [canvasRef.current!]);
+        cleanupResources(videoManagerRef.current,[],[canvasRef.current!]);
       }
     );
     memoryMonitorRef.current.start();
-    
-    if (CanvasRef.current) {
-      optimizeCanvas(CanvasRef.current);
+
+    if(canvasRef.current){
+      optimizeCanvas(canvasRef.current);
     }
-    
-    return () => {
+
+    return ()=>{
       memoryMonitorRef.current?.stop();
-      cleanupResources(VideoManagerRef.current, [], [canvasRef.current!]);
+      cleanupResources(videoManagerRef.current,[],[canvasRef.current!]);
     };
-  }, []);
+  },[]);
 
   // Draft Restoration
-  useEffect(() => {
+  useEffect(()=>{
     const url = new URL(window.location.href);
     const restoreId = url.searchParams.get("restore");
-    
-    if (restoreId) {
-      loadDraft(restoreId).then(data => {
-        if (data) {
-          setCanvasPreset(data.canvasPreset || CANVAS_PRESETS[0]);
-          setLayers(data.layers?.map((l: any) => ({...l, _w: 0, _h: 0})) || [MakeLayer()]);
-          setSelectedLayerId(data.layers[0]?.id || null);
-          setActiveOverlays(data.activeOverlays || []);
-          setCustomOverlays(data.customOverlays || []);
-          setAudioLibrary(data.audioLibrary || []);
-          setTextTransition(data.textTransition || "none");
-          setTextTransitionParams(data.TextTransitionParams || DEFAULT_TRANSITION);
-          setBgTransform(data.BgTransform || DEFAULT_MEDIA_TRANSFORM);
-          setMediaTransition(data.MediaTransition || "none");
-          
+
+    if(restoreId){
+      loadDraft(restoreId).then(data=>{
+        if(data){
+          setCanvasPreset(data.canvasPreset||CANVAS_PRESETS[0]);
+          setLayers(data.layers?.map((l:any)=>({...l,_w:0,_h:0}))||[MakeLayer()]);
+          setSelectedLayerId(data.layers[0]?.id||null);
+          setActiveOverlays(data.activeOverlays||[]);
+          setCustomOverlays(data.customOverlays||[]);
+          setAudioLibrary(data.audioLibrary||[]);
+          setTextTransition(data.textTransition||"none");
+          setTextTransitionParams(data.textTransitionParams||DEFAULT_TRANSITION);
+          setBgTransform(data.bgTransform||DEFAULT_MEDIA_TRANSFORM);
+          setMediaTransition(data.mediaTransition||"none");
+
           url.searchParams.delete("restore");
-          window.history.replaceState({}, "", url.toString());
+          window.history.replaceState({},"",url.toString());
         }
       });
     }
-  }, []);
+  },[]);
 
   // BG Upload
   const handleBgUpload = (e:React.ChangeEvent<HTMLInputElement>) => {
@@ -402,14 +398,14 @@ export default function TextAnimator() {
   const handleVideoUpload = (e:React.ChangeEvent<HTMLInputElement>) => {
     const file=e.target.files?.[0]; if(!file) return;
     const url=URL.createObjectURL(file);
-    if(bgVideo)bgVideo.pause();
-    const Vid=document.createElement("video");
-    Vid.src=url;
-    Vid.loop=true;
-    Vid.muted=false;
-    Vid.playsInline=true;
-    Vid.play().catch(()=>{Vid.muted=true;Vid.play();});
-    setBgVideo(Vid);
+    if(bgVideo) bgVideo.pause();
+    const vid=document.createElement("video");
+    vid.src=url;
+    vid.loop=true;
+    vid.muted=false;
+    vid.playsInline=true;
+    vid.play().catch(()=>{vid.muted=true;vid.play();});
+    setBgVideo(vid);
     setBgImage(null);
     setBgTransform(DEFAULT_MEDIA_TRANSFORM);
   };
@@ -417,211 +413,213 @@ export default function TextAnimator() {
   const clearBg = () => {
     if(bgVideo) bgVideo.pause();
     setBgImage(null);
-    SetBgVideo(null);
-    SetBgTransform(DEFAULT_MEDIA_TRANSFORM);
+    setBgVideo(null);
+    setBgTransform(DEFAULT_MEDIA_TRANSFORM);
     if(bgFileRef.current) bgFileRef.current.value="";
-    if(bgVidRef.current) bgVidRef.current.value="";
+    if(bgVidRef.current)  bgVidRef.current.value="";
   };
 
   // Transition Functions
-  const triggerTransition = useCallback((transitionId: string, params: TransitionParams = DEFAULT_TRANSITION) => {
-    if(transitionId==="None") return;
-    
+  const triggerTransition = useCallback((transitionId:string, params:TransitionParams=DEFAULT_TRANSITION)=>{
+    if(transitionId==="none") return;
+
     setIsTransitioning(true);
     setTransitionProgress(0);
-    
+
     const startTime = performance.now();
-    const duration = params.duration * 1000;
-    
+    const duration  = params.duration*1000;
+
     const animate = () => {
-      const elapsed = performance.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
+      const elapsed  = performance.now()-startTime;
+      const progress = Math.min(elapsed/duration,1);
       setTransitionProgress(progress);
-      
-      If(Progress < 1) {
+
+      if(progress<1){
         requestAnimationFrame(animate);
-      } Else {
-        setTimeout(() => {
+      } else {
+        setTimeout(()=>{
           setIsTransitioning(false);
           setTransitionProgress(0);
-        }, 100);
+        },100);
       }
     };
-    
+
     requestAnimationFrame(animate);
-  }, []);
+  },[]);
 
   // Overlay Management
   const addOverlay = (defId:string) => {
-    const def = OVERLAY_BY_ID[defId]; If(!Def) Return;
-    const instanceId = Math.random().toString(36).slice(2);
+    const def=OVERLAY_BY_ID[defId]; if(!def) return;
+    const instanceId=Math.random().toString(36).slice(2);
     const newOv:ActiveOverlay = {
-      instanceId, defId, label:def.label, emoji:Def.emoji, 
-      params:{...Def.params}, 
-      posX:0.5, posY:0.5, scale:1, rotation: 0, opacity: 1
+      instanceId, defId, label:def.label, emoji:def.emoji,
+      params:{...def.params},
+      posX:0.5, posY:0.5, scale:1, rotation:0, opacity:1
     };
-    overlayParticlesRef.current[instanceId] = Def.initParticles(presetRef.current.w,presetRef.current.h,def.params);
+    overlayParticlesRef.current[instanceId]=def.initParticles(presetRef.current.w,presetRef.current.h,def.params);
     setActiveOverlays(prev=>[...prev,newOv]);
     setEditingOverlay(instanceId);
     setSelectedOverlayInstance(instanceId);
   };
-  
+
   const addCustomOverlay = (co:CustomOverlay) => {
-    const instanceId = Math.random().toString(36).slice(2);
+    const instanceId=Math.random().toString(36).slice(2);
     const newOv:ActiveOverlay = {
-      instanceId, defId:`custom:${co.id}`, label:Co.name, Emoji:Co.isVideo?"🎬":"🖼️", 
+      instanceId, defId:`custom:${co.id}`, label:co.name, emoji:co.isVideo?"🎬":"🖼️",
       params:{
-        count:Co.count, direction:Co.direction, 
-        sizeMin:Co.sizeMin, SizeMax:Co.sizeMax,
-        SpeedMin:Co.speedMin, SpeedMax:Co.speedMax,
-        AlphaMin:Co.alphaMin, AlphaMax:Co.alphaMax,
-        Rotate:Co.rotate, opacity: Co.opacity || 1
+        count:co.count, direction:co.direction,
+        sizeMin:co.sizeMin, sizeMax:co.sizeMax,
+        speedMin:co.speedMin, speedMax:co.speedMax,
+        alphaMin:co.alphaMin, alphaMax:co.alphaMax,
+        rotate:co.rotate, opacity:co.opacity||1
       },
-      posX:0.5, posY:0.5, scale:1, rotation: 0, opacity: Co.opacity || 1
+      posX:0.5, posY:0.5, scale:1, rotation:0, opacity:co.opacity||1
     };
-    overlayParticlesRef.current[instanceId] = initCustomParticles(presetRef.current.w,presetRef.current.h,Co);
+    overlayParticlesRef.current[instanceId]=initCustomParticles(presetRef.current.w,presetRef.current.h,co);
     setActiveOverlays(prev=>[...prev,newOv]);
     setEditingOverlay(instanceId);
-    SetSelectedOverlayInstance(instanceId);
+    setSelectedOverlayInstance(instanceId);
   };
-  
+
   const removeOverlay = (instanceId:string) => {
     delete overlayParticlesRef.current[instanceId];
     setActiveOverlays(prev=>prev.filter(o=>o.instanceId!==instanceId));
-    If(EditingOverlay===instanceId)SetEditingOverlay(null);
-    If(SelectedOverlayInstance===instanceId)SetSelectedOverlayInstance(null);
+    if(editingOverlay===instanceId) setEditingOverlay(null);
+    if(selectedOverlayInstance===instanceId) setSelectedOverlayInstance(null);
   };
-  
+
   const updateOverlayParams = (instanceId:string,patch:Partial<OverlayParams>) => {
     setActiveOverlays(prev=>prev.map(o=>{
-      If(O.instanceId!==instanceId)Return O;
-      const newParams={...O.params,...patch};
-      If(Patch.count!==undefined||Patch.direction!==undefined||Patch.sizeMin!==undefined||Patch.sizeMax!==undefined){
+      if(o.instanceId!==instanceId) return o;
+      const newParams={...o.params,...patch};
+      if(patch.count!==undefined||patch.direction!==undefined||patch.sizeMin!==undefined||patch.sizeMax!==undefined){
         const W=presetRef.current.w,H=presetRef.current.h;
-        If(O.defId.startsWith("custom:")){
-          const co=customOverlaysRef.current.find(c=>O.defId===`custom:${c.id}`);
-          If(Co)overlayParticlesRef.current[O.instanceId]=InitCustomParticles(W,H,{...Co,...newParams,count:newParams.count||Co.count});
-        } Else {
-          Const def=OVERLAY_BY_ID[O.defId];
-          If(Def)overlayParticlesRef.current[O.instanceId]=Def.initParticles(W,H,newParams);
+        if(o.defId.startsWith("custom:")){
+          const co=customOverlaysRef.current.find(c=>o.defId===`custom:${c.id}`);
+          if(co) overlayParticlesRef.current[o.instanceId]=initCustomParticles(W,H,{...co,...newParams,count:newParams.count||co.count});
+        } else {
+          const def=OVERLAY_BY_ID[o.defId];
+          if(def) overlayParticlesRef.current[o.instanceId]=def.initParticles(W,H,newParams);
         }
       }
-      Return {...O,params:newParams};
+      return {...o,params:newParams};
     }));
   };
 
   // Custom Overlay Upload
   const handleCustomUpload = (e:React.ChangeEvent<HTMLInputElement>) => {
-    const file=e.target.files?.[0]; If(!File) Return;
-    Const isGif=file.type==="image/gif";
-    Const IsVideo=file.type.startsWith("video/");
-    Const reader=new FileReader();
+    const file=e.target.files?.[0]; if(!file) return;
+    const isGif   = file.type==="image/gif";
+    const isVideo = file.type.startsWith("video/");
+    const reader  = new FileReader();
     reader.onload=ev=>{
       setPendingCustomFile(ev.target?.result as string);
-      SetPendingIsGif(IsGif);
-      SetPendingIsVideo(IsVideo);
+      setPendingIsGif(isGif);
+      setPendingIsVideo(isVideo);
     };
     reader.readAsDataURL(file);
   };
-  
-  Const finalizeCustomOverlay = () => {
-    If(!PendingCustomFile||!NewCustomName.trim())Return;
-    Const co:CustomOverlay = {
+
+  const finalizeCustomOverlay = () => {
+    if(!pendingCustomFile||!newCustomName.trim()) return;
+    const co:CustomOverlay = {
       id:Math.random().toString(36).slice(2),
-      name:NewCustomName.trim(),
-      category:NewCustomCategory||"Custom",
-      dataUrl:PendingCustomFile,
-      isGif:PendingIsGif,
-      isVideo:PendingIsVideo,
+      name:newCustomName.trim(),
+      category:newCustomCategory||"Custom",
+      dataUrl:pendingCustomFile,
+      isGif:pendingIsGif,
+      isVideo:pendingIsVideo,
       count:60,
       direction:"top",
       sizeMin:20,
-      SizeMax:60,
-      SpeedMin:1,
-      SpeedMax:4,
-      AlphaMin:0.7,
-      AlphaMax:1,
-      Rotate:true,
-      opacity: 1
+      sizeMax:60,
+      speedMin:1,
+      speedMax:4,
+      alphaMin:0.7,
+      alphaMax:1,
+      rotate:true,
+      opacity:1
     };
-    SetCustomOverlays(prev=>[...prev,Co]);
-    SetPendingCustomFile(null);SetNewCustomName("");SetShowAddCustom(false);
-    AddCustomOverlay(Co);
+    setCustomOverlays(prev=>[...prev,co]);
+    setPendingCustomFile(null);
+    setNewCustomName("");
+    setShowAddCustom(false);
+    addCustomOverlay(co);
   };
 
   // Audio Functions
-  Const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    Const file = e.target.files?.[0];
-    If (!file) Return;
-    Const url = URL.createObjectURL(file);
-    Const newAudio: AudioLibraryItem = {
-      id: Math.random().toString(36).slice(2),
-      name: file.name.replace(/\.[^/.]+$/, ""),
-      type: "uploaded",
+  const handleAudioUpload = (e:React.ChangeEvent<HTMLInputElement>) => {
+    const file=e.target.files?.[0];
+    if(!file) return;
+    const url=URL.createObjectURL(file);
+    const newAudio:AudioLibraryItem = {
+      id:Math.random().toString(36).slice(2),
+      name:file.name.replace(/\.[^/.]+$/,""),
+      type:"uploaded",
       url,
-      duration: 0
+      duration:0
     };
-    SetAudioLibrary(prev => [...prev, newAudio]);
+    setAudioLibrary(prev=>[...prev,newAudio]);
   };
 
-  Const playAudio = (audio: AudioLibraryItem) => {
-    If (audioRef.current) {
+  const playAudio = (audio:AudioLibraryItem) => {
+    if(audioRef.current){
       audioRef.current.pause();
-      audioRef.current = null;
+      audioRef.current=null;
     }
-    Const a = new Audio(audio.url);
-    a.loop = true;
-    a.play().catch(() => {});
-    audioRef.current = a;
-    SetPlayingAudio(audio.id);
+    const a=new Audio(audio.url);
+    a.loop=true;
+    a.play().catch(()=>{});
+    audioRef.current=a;
+    setPlayingAudio(audio.id);
   };
 
-  Const stopAudio = () => {
-    If (audioRef.current) {
+  const stopAudio = () => {
+    if(audioRef.current){
       audioRef.current.pause();
-      audioRef.current = null;
+      audioRef.current=null;
     }
-    SetPlayingAudio(null);
+    setPlayingAudio(null);
   };
 
-  Const generateTTS = () => {
-    If (!ttsText.trim()) return;
-    If (!('speechSynthesis' in window)) {
+  const generateTTS = () => {
+    if(!ttsText.trim()) return;
+    if(!("speechSynthesis" in window)){
       alert("TTS not supported in this browser");
       return;
     }
-    
-    Const utterance = new SpeechSynthesisUtterance(ttsText);
-    utterance.rate = ttsRate;
-    utterance.pitch = ttsPitch;
-    
-    Const voices = window.speechSynthesis.getVoices();
-    If (voices.length > 0 && selectedVoice !== "default") {
-      Const voice = voices.find(v => v.name === selectedVoice);
-      If (voice) utterance.voice = voice;
+
+    const utterance=new SpeechSynthesisUtterance(ttsText);
+    utterance.rate=ttsRate;
+    utterance.pitch=ttsPitch;
+
+    const voices=window.speechSynthesis.getVoices();
+    if(voices.length>0 && selectedVoice!=="default"){
+      const voice=voices.find(v=>v.name===selectedVoice);
+      if(voice) utterance.voice=voice;
     }
-    
+
     window.speechSynthesis.speak(utterance);
-    
-    Const newTTS: AudioLibraryItem = {
-      id: Math.random().toString(36).slice(2),
-      name: `TTS: ${ttsText.slice(0, 30)}...`,
-      type: "tts",
-      url: "#tts",
-      duration: 0
+
+    const newTTS:AudioLibraryItem = {
+      id:Math.random().toString(36).slice(2),
+      name:`TTS: ${ttsText.slice(0,30)}...`,
+      type:"tts",
+      url:"#tts",
+      duration:0
     };
-    SetAudioLibrary(prev => [...prev, newTTS]);
-    SetTtsText("");
+    setAudioLibrary(prev=>[...prev,newTTS]);
+    setTtsText("");
   };
 
-  Const removeAudio = (id: string) => {
-    SetAudioLibrary(prev => prev.filter(a => a.id !== id));
-    If (playingAudio === id) stopAudio();
+  const removeAudio = (id:string) => {
+    setAudioLibrary(prev=>prev.filter(a=>a.id!==id));
+    if(playingAudio===id) stopAudio();
   };
 
   // Project Save / Load
-  Const saveProject = () => {
-    Const state:ProjectState = {
+  const saveProject = () => {
+    const state:ProjectState = {
       version:2,
       canvasPreset,
       layers:layers.map(({_w,_h,...rest})=>rest),
@@ -634,39 +632,39 @@ export default function TextAnimator() {
       bgTransform,
       mediaTransition
     };
-    Const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
-    Const url=URL.createObjectURL(blob);
-    Const a=document.createElement("a");
+    const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
     a.href=url;
     a.download=`horror-project-${Date.now()}.json`;
     a.click();
   };
 
-  Const loadProjectRef = useRef<HTMLInputElement>(null);
-  Const loadProject = (e:React.ChangeEvent<HTMLInputElement>) => {
-    Const file=e.target.files?.[0]; If(!File) Return;
-    Const reader=new FileReader();
+  const loadProjectRef = useRef<HTMLInputElement>(null);
+  const loadProject = (e:React.ChangeEvent<HTMLInputElement>) => {
+    const file=e.target.files?.[0]; if(!file) return;
+    const reader=new FileReader();
     reader.onload=ev=>{
       try{
-        Const state:ProjectState=JSON.parse(ev.target?.result as string);
+        const state:ProjectState=JSON.parse(ev.target?.result as string);
         setCanvasPreset(state.canvasPreset||CANVAS_PRESETS[0]);
         setLayers(state.layers.map(l=>({...l,_w:0,_h:0})));
         setSelectedLayerId(state.layers[0]?.id||null);
         setCustomOverlays(state.customOverlays||[]);
-        SetAudioLibrary(state.audioLibrary||[]);
+        setAudioLibrary(state.audioLibrary||[]);
         setTextTransition(state.textTransition||"none");
-        setTextTransitionParams(state.TextTransitionParams||DEFAULT_TRANSITION);
-        setBgTransform(state.BgTransform||DEFAULT_MEDIA_TRANSFORM);
-        SetMediaTransition(state.MediaTransition||"none");
-        
-        Const W=state.canvasPreset?.w||1920,H=state.canvasPreset?.h||1080;
+        setTextTransitionParams(state.textTransitionParams||DEFAULT_TRANSITION);
+        setBgTransform(state.bgTransform||DEFAULT_MEDIA_TRANSFORM);
+        setMediaTransition(state.mediaTransition||"none");
+
+        const W=state.canvasPreset?.w||1920,H=state.canvasPreset?.h||1080;
         state.activeOverlays?.forEach(ov=>{
-          If(Ov.defId.startsWith("custom:")){
-            Const co=(state.customOverlays||[]).find(c=>`custom:${c.id}`===Ov.defId);
-            If(Co)overlayParticlesRef.current[Ov.instanceId]=InitCustomParticles(W,H,Co);
-          }Else{
-            Const def=OVERLAY_BY_ID[Ov.defId];
-            If(Def)overlayParticlesRef.current[Ov.instanceId]=Def.initParticles(W,H,OV.params);
+          if(ov.defId.startsWith("custom:")){
+            const co=(state.customOverlays||[]).find(c=>`custom:${c.id}`===ov.defId);
+            if(co) overlayParticlesRef.current[ov.instanceId]=initCustomParticles(W,H,co);
+          } else {
+            const def=OVERLAY_BY_ID[ov.defId];
+            if(def) overlayParticlesRef.current[ov.instanceId]=def.initParticles(W,H,ov.params);
           }
         });
         setActiveOverlays(state.activeOverlays||[]);
@@ -677,550 +675,541 @@ export default function TextAnimator() {
 
   // Render Loop
   useEffect(()=>{
-    Const Canvas=CanvasRef.current;
-    If(!Canvas)Return;
-    Const ctx=Canvas.getContext("2d");
-    If(!ctx)Return;
-    
-    Let running=true;
-    Let fc=0;
+    const canvas=canvasRef.current;
+    if(!canvas) return;
+    const ctx=canvas.getContext("2d");
+    if(!ctx) return;
 
-    Const drawBg=(W:number,H:number)=>{
-      Const fit=bgFitRef.current;
-      Const img=BgImageRef.current;
-      Const Vid=BgVideoRef.current;
-      Const tpl=TemplateRef.current;
-      Const transform=BgTransformRef.current;
-      
+    let running=true;
+    let fc=0;
+
+    const drawBg=(W:number,H:number)=>{
+      const fit       = bgFitRef.current;
+      const img       = bgImageRef.current;
+      const vid       = bgVideoRef.current;
+      const tpl       = templateRef.current;
+      const transform = bgTransformRef.current;
+
       ctx.clearRect(0,0,W,H);
-      Const media=Vid&&Vid.readyState>=2?Vid:Img;
-      
-      If(Media){
-        Const sw=Media instanceof HTMLVideoElement?Media.videoWidth:(Media as HTMLImageElement).naturalWidth;
-        Const sh=Media instanceof HTMLVideoElement?Media.videoHeight:(Media as HTMLImageElement).naturalHeight;
-        
-        // Apply media transform
+      const media=vid&&vid.readyState>=2?vid:img;
+
+      if(media){
+        const sw=media instanceof HTMLVideoElement?media.videoWidth:(media as HTMLImageElement).naturalWidth;
+        const sh=media instanceof HTMLVideoElement?media.videoHeight:(media as HTMLImageElement).naturalHeight;
+
         ctx.save();
-        applyMediaTransform(ctx, transform, W/2, H/2);
-        
-        Let dx=0,dy=0,dw=W,dh=H;
-        If(Fit==="contain"){
-          Const sc=Math.min(W/sw,H/sh);
-          dw=sw*sc;dh=Sh*sc;dx=(W-dw)/2;dy=(H-dh)/2;
+        applyMediaTransform(ctx,transform,W/2,H/2);
+
+        let dx=0,dy=0,dw=W,dh=H;
+        if(fit==="contain"){
+          const sc=Math.min(W/sw,H/sh);
+          dw=sw*sc;dh=sh*sc;dx=(W-dw)/2;dy=(H-dh)/2;
           ctx.fillStyle="#000";ctx.fillRect(0,0,W,H);
+        } else if(fit==="cover"){
+          const sc=Math.max(W/sw,H/sh);
+          dw=sw*sc;dh=sh*sc;dx=(W-dw)/2;dy=(H-dh)/2;
         }
-        Else If(Fit==="cover"){
-          Const sc=Math.max(W/sw,H/sh);
-          dw=Sw*sc;dh=Sh*sc;dx=(W-dw)/2;dy=(H-dh)/2;
-        }
-        ctx.drawImage(Media,dx,dy,dw,dh);
+        ctx.drawImage(media,dx,dy,dw,dh);
         ctx.restore();
-      }Else If(Tpl.backgroundStyle==="dark-gradient"){
-        Const g=ctx.createLinearGradient(0,0,W,H);
+      } else if(tpl.backgroundStyle==="dark-gradient"){
+        const g=ctx.createLinearGradient(0,0,W,H);
         g.addColorStop(0,"#0a0808");
         g.addColorStop(1,"#150a1a");
         ctx.fillStyle=g;
         ctx.fillRect(0,0,W,H);
-      }Else{
+      } else {
         ctx.fillStyle="#05050a";
         ctx.fillRect(0,0,W,H);
       }
     };
 
-    Const getAnim=(anim:string,t:number,W:number,H:number)=>{
-      Let ox=0,oy=0,sc=1,al=1,er=0;
-      If(Anim==="float")  oy=Math.sin(t*1.5)*(H*0.03);
-      Else If(Anim==="bounce") oy=-Math.abs(Math.sin(T*3))*(H*0.06);
-      Else If(Anim==="shake"){ox=(Math.random()-0.5)*12;oy=(Math.random()-0.5)*6;}
-      Else If(Anim==="flicker") al=Math.random()>0.1?1:(Math.random()>0.5?0.3:0);
-      Else If(Anim==="zoom-pulse") sc=1+Math.sin(T*3)*0.1;
-      Else If(Anim==="neon-pulse") al=0.7+(Math.sin(T*4)+1)/2*0.3;
-      Else If(Anim==="wobble") er=Math.sin(T*4)*0.15;
-      Else If(Anim==="heartbeat") sc=1+Math.abs(Math.sin(T*4))*0.15;
-      Else If(Anim==="levitate"){oy=Math.sin(T*2)*(H*0.02);sc=1+Math.sin(T*2)*0.02;}
-      Else If(Anim==="spin") er=T*2;
-      Else If(Anim==="cinematic-fade"){Const c=(t%4)/4;al=c<0.25?c*4:c<0.75?1:(1-c)*4;}
-      Else If(Anim==="slide-left"){Const c=(t*0.5)%2;ox=c<1?W*(1-c*2):0;}
-      Else If(Anim==="slide-right"){Const c=(t*0.5)%2;ox=C<1?-W*(1-c*2):0;}
-      Else If(Anim==="Slide-up"){Const c=(t*0.5)%2;oy=C<1?H*(1-c*2):0;}
-      Else If(Anim==="Fade-in") al=(Math.sin(T*0.5)+1)*0.5;
-      Else If(Anim==="Zoom-in") sc=0.5+((Math.sin(T*0.5)+1)*0.5)*0.5;
-      Else If(Anim==="Swing") er=Math.sin(T*3)*0.2;
-      Else If(Anim==="Tada"){sc=1+Math.abs(Math.sin(T*6))*0.1;er=Math.sin(T*8)*0.05;}
-      Else If(Anim==="Wiggle") ox=Math.sin(T*8)*8;
-      Else If(Anim==="Breathe") sc=0.95+Math.sin(T*1.5)*0.05;
-      Else If(Anim==="Flash") al=Math.round(Math.sin(T*6)*0.5+0.5);
-      Else If(Anim==="Spin-reveal"){Const c=(t*0.5)%Math.PI;sc=Math.abs(Math.cos(C));al=0.3+sc*0.7;}
-      Else If(Anim==="Elastic") sc=1+Math.sin(T*8)*Math.exp(-t*0.5)*0.3;
-      Else If(Anim==="Cursed"){ox=(Math.random()-0.5)*6;oy=(Math.random()-0.5)*4;er=(Math.random()-0.5)*0.1;}
-      Else If(Anim==="Possessed"){ox=(Math.random()-0.5)*15;er=(Math.random()-0.5)*0.2;al=0.7+Math.random()*0.3;}
-      Else If(Anim==="Phantom") al=0.3+Math.abs(Math.sin(T*1.5))*0.5;
-      Else If(Anim==="Void"){sc=1+Math.sin(T*0.5)*0.08;al=0.6+Math.sin(T*2)*0.2;}
-      Else If(Anim==="Gold-shine") al=0.8+Math.sin(T*4)*0.2;
-      Else If(Anim==="Ice-glow"){sc=1+Math.sin(T*2)*0.03;al=0.85+Math.sin(T*3)*0.1;}
-      Return {ox,oy,sc,al,er};
+    const getAnim=(anim:string,t:number,W:number,H:number)=>{
+      let ox=0,oy=0,sc=1,al=1,er=0;
+      if     (anim==="float")       oy=Math.sin(t*1.5)*(H*0.03);
+      else if(anim==="bounce")      oy=-Math.abs(Math.sin(t*3))*(H*0.06);
+      else if(anim==="shake")       {ox=(Math.random()-0.5)*12;oy=(Math.random()-0.5)*6;}
+      else if(anim==="flicker")     al=Math.random()>0.1?1:(Math.random()>0.5?0.3:0);
+      else if(anim==="zoom-pulse")  sc=1+Math.sin(t*3)*0.1;
+      else if(anim==="Neon-pulse")  al=0.7+(Math.sin(t*4)+1)/2*0.3;
+      else if(anim==="wobble")      er=Math.sin(t*4)*0.15;
+      else if(anim==="heartbeat")   sc=1+Math.abs(Math.sin(t*4))*0.15;
+      else if(anim==="levitate")    {oy=Math.sin(t*2)*(H*0.02);sc=1+Math.sin(t*2)*0.02;}
+      else if(anim==="spin")        er=t*2;
+      else if(anim==="cinematic-fade"){const c=(t%4)/4;al=c<0.25?c*4:c<0.75?1:(1-c)*4;}
+      else if(anim==="slide-left")  {const c=(t*0.5)%2;ox=c<1?W*(1-c*2):0;}
+      else if(anim==="slide-right") {const c=(t*0.5)%2;ox=c<1?-W*(1-c*2):0;}
+      else if(anim==="slide-up")    {const c=(t*0.5)%2;oy=c<1?H*(1-c*2):0;}
+      else if(anim==="fade-in")     al=(Math.sin(t*0.5)+1)*0.5;
+      else if(anim==="zoom-in")     sc=0.5+((Math.sin(t*0.5)+1)*0.5)*0.5;
+      else if(anim==="swing")       er=Math.sin(t*3)*0.2;
+      else if(anim==="tada")        {sc=1+Math.abs(Math.sin(t*6))*0.1;er=Math.sin(t*8)*0.05;}
+      else if(anim==="wiggle")      ox=Math.sin(t*8)*8;
+      else if(anim==="breathe")     sc=0.95+Math.sin(t*1.5)*0.05;
+      else if(anim==="flash")       al=Math.round(Math.sin(t*6)*0.5+0.5);
+      else if(anim==="spin-reveal") {const c=(t*0.5)%Math.PI;sc=Math.abs(Math.cos(c));al=0.3+sc*0.7;}
+      else if(anim==="elastic")     sc=1+Math.sin(t*8)*Math.exp(-t*0.5)*0.3;
+      else if(anim==="cursed")      {ox=(Math.random()-0.5)*6;oy=(Math.random()-0.5)*4;er=(Math.random()-0.5)*0.1;}
+      else if(anim==="possessed")   {ox=(Math.random()-0.5)*15;er=(Math.random()-0.5)*0.2;al=0.7+Math.random()*0.3;}
+      else if(anim==="phantom")     al=0.3+Math.abs(Math.sin(t*1.5))*0.5;
+      else if(anim==="void")        {sc=1+Math.sin(t*0.5)*0.08;al=0.6+Math.sin(t*2)*0.2;}
+      else if(anim==="gold-shine")  al=0.8+Math.sin(t*4)*0.2;
+      else if(anim==="ice-glow")    {sc=1+Math.sin(t*2)*0.03;al=0.85+Math.sin(t*3)*0.1;}
+      return {ox,oy,sc,al,er};
     };
 
-    Const DrawLayer=(l:TextLayer,W:number,H:number,t:number)=>{
-      Const Anim=l.animation;
-      Const{ox,oy,sc,al,er}=getAnim(Anim,t,W,H);
-      Const cx=l.x*W+ox,cy=L.y*H+oy;
-      
-      ctx.Save();
+    const drawLayer=(l:TextLayer,W:number,H:number,t:number)=>{
+      const anim=l.animation;
+      const{ox,oy,sc,al,er}=getAnim(anim,t,W,H);
+      const cx=l.x*W+ox,cy=l.y*H+oy;
+
+      ctx.save();
       ctx.translate(cx,cy);
       ctx.rotate(l.rotation+er);
       ctx.scale(sc,sc);
       ctx.globalAlpha=l.opacity*al;
       ctx.textAlign=l.align;
       ctx.textBaseline="middle";
-      
-      Const fs=Math.max(8,l.fontSize);
+
+      const fs=Math.max(8,l.fontSize);
       ctx.font=`${l.italic?"italic ":""}${l.bold?"bold ":""}${fs}px '${l.fontFamily}',Impact,sans-serif`;
-      
-      If(L.glowEnabled){ctx.shadowColor=l.glowColor;ctx.ShadowBlur=30+Math.sin(T*2)*10;}
-      Else If(L.shadowEnabled){ctx.ShadowColor=l.shadowColor;ctx.ShadowBlur=l.shadowBlur;ctx.ShadowOffsetX=3;ctx.ShadowOffsetY=3;}
-      
-      If(Anim==="Neon-pulse"){Const i=(Math.sin(T*4)+1)/2;ctx.ShadowColor=l.color;ctx.ShadowBlur=10+i*60;}
-      Else If(Anim==="Fire-glow"){ctx.ShadowColor="#ff6600";ctx.ShadowBlur=20+Math.sin(T*2)*20;}
-      Else If(Anim==="Gold-shine"){ctx.ShadowColor="#ffdd00";ctx.ShadowBlur=20+Math.sin(T*4)*10;}
-      Else If(Anim==="Ice-glow"){ctx.ShadowColor="#88ccff";ctx.ShadowBlur=20+Math.sin(T*3)*8;}
-      Else If(Anim==="Toxic-glow"){ctx.ShadowColor="#88ff00";ctx.ShadowBlur=20+Math.sin(T*4)*10;}
-      Else If(Anim==="Hologram"){ctx.ShadowColor="#00ffcc";ctx.ShadowBlur=20;}
-      Else If(Anim==="Hellfire"){ctx.ShadowColor="#ff4400";ctx.ShadowBlur=25+Math.sin(T*3)*10;}
-      
-      If(Anim==="Glitch"){
+
+      if(l.glowEnabled)    {ctx.shadowColor=l.glowColor;ctx.shadowBlur=30+Math.sin(t*2)*10;}
+      else if(l.shadowEnabled){ctx.shadowColor=l.shadowColor;ctx.shadowBlur=l.shadowBlur;ctx.shadowOffsetX=3;ctx.shadowOffsetY=3;}
+
+      if     (anim==="Neon-pulse") {const i=(Math.sin(t*4)+1)/2;ctx.shadowColor=l.color;ctx.shadowBlur=10+i*60;}
+      else if(anim==="fire-glow")  {ctx.shadowColor="#ff6600";ctx.shadowBlur=20+Math.sin(t*2)*20;}
+      else if(anim==="gold-shine") {ctx.shadowColor="#ffdd00";ctx.shadowBlur=20+Math.sin(t*4)*10;}
+      else if(anim==="ice-glow")   {ctx.shadowColor="#88ccff";ctx.shadowBlur=20+Math.sin(t*3)*8;}
+      else if(anim==="toxic-glow") {ctx.shadowColor="#88ff00";ctx.shadowBlur=20+Math.sin(t*4)*10;}
+      else if(anim==="hologram")   {ctx.shadowColor="#00ffcc";ctx.shadowBlur=20;}
+      else if(anim==="hellfire")   {ctx.shadowColor="#ff4400";ctx.shadowBlur=25+Math.sin(t*3)*10;}
+
+      if(anim==="glitch"){
         ctx.fillStyle=l.color;ctx.fillText(l.text,0,0);
-        If(Math.random()>0.6){
+        if(Math.random()>0.6){
           try{
-            Const s=ctx.getImageData(0,cy-15,W,30);
-            ctx.PutImageData(s,(Math.random()-0.5)*60,cy-15);
+            const s=ctx.getImageData(0,cy-15,W,30);
+            ctx.putImageData(s,(Math.random()-0.5)*60,cy-15);
           }catch{}
         }
-        ctx.GlobalAlpha*=0.5;
-        ctx.FillStyle=Math.random()>0.5?"#ff0066":"#00ffff";
-        ctx.FillText(L.text,(Math.random()-0.5)*8,0);
-        ctx.FillStyle=Math.random()>0.5?"#00ffff":"#ff0066";
-        ctx.FillText(L.text,-(Math.random()-0.5)*8,2);
+        ctx.globalAlpha*=0.5;
+        ctx.fillStyle=Math.random()>0.5?"#ff0066":"#00ffff";
+        ctx.fillText(l.text,(Math.random()-0.5)*8,0);
+        ctx.fillStyle=Math.random()>0.5?"#00ffff":"#ff0066";
+        ctx.fillText(l.text,-(Math.random()-0.5)*8,2);
         ctx.restore();
-        Return;
+        return;
       }
-      
-      Let fillCol=l.color;
-      If(Anim==="Rainbow"||Anim==="Color-cycle")fillCol=`hsl(${(t*60)%360},100%,60%)`;
-      Else If(Anim==="Disco")fillCol=`hsl(${Math.floor(t*10*36)},100%,60%)`;
-      Else If(Anim==="Plasma")fillCol=`hsl(${Math.sin(T*2)*60+280},100%,65%)`;
-      Else If(Anim==="Gold-shine")fillCol="#ffdd00";
-      Else If(Anim==="Ice-glow")fillCol="#aaddff";
-      Else If(Anim==="Toxic-glow")fillCol="#aaff44";
-      Else If(Anim==="Hologram")fillCol=`rgba(0,255,200,${0.6+Math.sin(T*4)*0.3})`;
-      
-      Const lines=l.text.split("\n");
-      Const lineH=fs*1.2;
-      Const totalH=(Lines.length-1)*lineH;
-      
-      Lines.forEach((line,li)=>{
-        Const ly=li*lineH-totalH/2;
-        If(L.strokeWidth>0){
-          ctx.StrokeStyle=l.strokeColor;
-          ctx.LineWidth=l.strokeWidth;
-          ctx.LineJoin="round";
-          ctx.StrokeText(line,0,ly);
+
+      let fillCol=l.color;
+      if     (anim==="rainbow"||anim==="color-cycle") fillCol=`hsl(${(t*60)%360},100%,60%)`;
+      else if(anim==="disco")      fillCol=`hsl(${Math.floor(t*10*36)},100%,60%)`;
+      else if(anim==="plasma")     fillCol=`hsl(${Math.sin(t*2)*60+280},100%,65%)`;
+      else if(anim==="gold-shine") fillCol="#ffdd00";
+      else if(anim==="ice-glow")   fillCol="#aaddff";
+      else if(anim==="toxic-glow") fillCol="#aaff44";
+      else if(anim==="hologram")   fillCol=`rgba(0,255,200,${0.6+Math.sin(t*4)*0.3})`;
+
+      const lines=l.text.split("\n");
+      const lineH=fs*1.2;
+      const totalH=(lines.length-1)*lineH;
+
+      lines.forEach((line,li)=>{
+        const ly=li*lineH-totalH/2;
+        if(l.strokeWidth>0){
+          ctx.strokeStyle=l.strokeColor;
+          ctx.lineWidth=l.strokeWidth;
+          ctx.lineJoin="round";
+          ctx.strokeText(line,0,ly);
         }
-        ctx.FillStyle=fillCol;
-        ctx.FillText(line,0,ly);
-        If(L.underline){
-          Const m=ctx.measureText(line);
-          Const uw=m.width;
-          Let ux=0;
-          If(L.align==="center")ux=-uw/2;
-          If(L.align==="right")ux=-uw;
-          ctx.Save();
-          ctx.ShadowBlur=0;
-          ctx.StrokeStyle=fillCol;
-          ctx.LineWidth=Math.max(1,fs*0.05);
-          ctx.BeginPath();
-          ctx.MoveTo(ux,ly+fs*0.15);
-          ctx.LineTo(ux+uw,ly+fs*0.15);
-          ctx.Stroke();
-          ctx.Restore();
+        ctx.fillStyle=fillCol;
+        ctx.fillText(line,0,ly);
+        if(l.underline){
+          const m=ctx.measureText(line);
+          const uw=m.width;
+          let ux=0;
+          if(l.align==="center") ux=-uw/2;
+          if(l.align==="right")  ux=-uw;
+          ctx.save();
+          ctx.shadowBlur=0;
+          ctx.strokeStyle=fillCol;
+          ctx.lineWidth=Math.max(1,fs*0.05);
+          ctx.beginPath();
+          ctx.moveTo(ux,ly+fs*0.15);
+          ctx.lineTo(ux+uw,ly+fs*0.15);
+          ctx.stroke();
+          ctx.restore();
         }
       });
-      
-      If(Anim==="Blood-drip"){
-        Const approxW=fs*l.text.length*0.5;
-        For(Let i=0;i<5;i++){
-          Const dx=-approxW*0.5+i*(approxW/4);
-          Const dy=((t*80+i*37)%(400));
-          ctx.FillStyle=`rgba(180,0,0,${0.6+Math.sin(T+i)*0.3})`;
-          ctx.ShadowBlur=0;
-          ctx.BeginPath();
-          ctx.Ellipse(dx,fs*0.6+dy,3,10+Math.sin(T+i)*5,0,0,Math.PI*2);
-          ctx.Fill();
+
+      if(anim==="blood-drip"){
+        const approxW=fs*l.text.length*0.5;
+        for(let i=0;i<5;i++){
+          const dx=-approxW*0.5+i*(approxW/4);
+          const dy=((t*80+i*37)%400);
+          ctx.fillStyle=`rgba(180,0,0,${0.6+Math.sin(t+i)*0.3})`;
+          ctx.shadowBlur=0;
+          ctx.beginPath();
+          ctx.ellipse(dx,fs*0.6+dy,3,10+Math.sin(t+i)*5,0,0,Math.PI*2);
+          ctx.fill();
         }
       }
-      
-      Const M=ctx.measureText(L.text);
+
+      const m=ctx.measureText(l.text);
       l._w=m.width+Math.max(0,l.letterSpacing)*l.text.length;
       l._h=fs*1.4;
-      ctx.Restore();
-      
+      ctx.restore();
+
       // Selection handles
-      If(L.id===selectedIdRef.current){
-        Const hw=l._w/2+10,hh=l._h/2+10;
-        ctx.Save();
+      if(l.id===selectedIdRef.current){
+        const hw=l._w/2+10,hh=l._h/2+10;
+        ctx.save();
         ctx.translate(cx,cy);
-        ctx.Rotate(L.rotation);
-        ctx.StrokeStyle="rgba(255,60,60,0.85)";
-        ctx.LineWidth=1.5;
-        ctx.SetLineDash([5,3]);
-        ctx.StrokeRect(-hw,-hh,hw*2,hh*2);
-        ctx.SetLineDash([]);
+        ctx.rotate(l.rotation);
+        ctx.strokeStyle="rgba(255,60,60,0.85)";
+        ctx.lineWidth=1.5;
+        ctx.setLineDash([5,3]);
+        ctx.strokeRect(-hw,-hh,hw*2,hh*2);
+        ctx.setLineDash([]);
         [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].forEach(([hx,hy])=>{
-          ctx.FillStyle="#fff";
-          ctx.StrokeStyle="#cc0000";
-          ctx.LineWidth=1.5;
-          ctx.BeginPath();
-          ctx.Arc(hx,hy,5,0,Math.PI*2);
-          ctx.Fill();
-          ctx.Stroke();
+          ctx.fillStyle="#fff";
+          ctx.strokeStyle="#cc0000";
+          ctx.lineWidth=1.5;
+          ctx.beginPath();
+          ctx.arc(hx,hy,5,0,Math.PI*2);
+          ctx.fill();
+          ctx.stroke();
         });
-        ctx.StrokeStyle="rgba(255,60,60,0.6)";
-        ctx.LineWidth=1;
-        ctx.BeginPath();
-        ctx.MoveTo(0,-hh);
-        ctx.LineTo(0,-hh-25);
-        ctx.Stroke();
-        ctx.FillStyle="#fff";
-        ctx.StrokeStyle="#cc0000";
-        ctx.LineWidth=1.5;
-        ctx.BeginPath();
-        ctx.Arc(0,-hh-25,5,0,Math.PI*2);
-        ctx.Fill();
-        ctx.Stroke();
-        ctx.Restore();
+        ctx.strokeStyle="rgba(255,60,60,0.6)";
+        ctx.lineWidth=1;
+        ctx.beginPath();
+        ctx.moveTo(0,-hh);
+        ctx.lineTo(0,-hh-25);
+        ctx.stroke();
+        ctx.fillStyle="#fff";
+        ctx.strokeStyle="#cc0000";
+        ctx.lineWidth=1.5;
+        ctx.beginPath();
+        ctx.arc(0,-hh-25,5,0,Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
       }
     };
 
-    Const render=(timestamp: number)=>{
-      If(!Running)Return;
-      
-      // Frame rate control
-      If (!fpsControllerRef.current.shouldRender(timestamp)) {
-        AnimFrameRef.current = requestAnimationFrame(render);
-        Return;
+    const render=(timestamp:number)=>{
+      if(!running) return;
+
+      if(!fpsControllerRef.current.shouldRender(timestamp)){
+        AnimFrameRef.current=requestAnimationFrame(render);
+        return;
       }
-      
+
       fc++;
-      Const t=fc/60;
-      Const W=presetRef.current.w;
-      Const H=presetRef.current.h;
-      Const CV=CanvasRef.current;
-      
-      If(!CV)Return;
-      If(Cv.width!==W||Cv.height!==H){
-        Cv.width=W;
-        Cv.height=H;
+      const t=fc/60;
+      const W=presetRef.current.w;
+      const H=presetRef.current.h;
+      const cv=canvasRef.current;
+
+      if(!cv) return;
+      if(cv.width!==W||cv.height!==H){
+        cv.width=W;
+        cv.height=H;
       }
-      
-      ctx.ClearRect(0,0,W,H);
-      
+
+      ctx.clearRect(0,0,W,H);
+
       // Draw background with optional transition
-      ctx.Save();
-      If (mediaTransition !== "none" && isTransitioning) {
-        applyTransition(ctx, W, H, transitionProgress, mediaTransition, mediaTransitionParams, true);
+      ctx.save();
+      if(mediaTransition!=="none" && isTransitioning){
+        applyTransition(ctx,W,H,transitionProgress,mediaTransition,mediaTransitionParams,true);
       }
-      DrawBg(W,H);
-      If (mediaTransition !== "none" && isTransitioning) {
+      drawBg(W,H);
+      if(mediaTransition!=="none" && isTransitioning){
         cleanupTransition(ctx);
       }
-      ctx.Restore();
-      
-      // Draw Overlays with culling
+      ctx.restore();
+
+      // Draw Overlays
       activeOverlaysRef.current.forEach(ov=>{
-        // Cull off-screen overlays
-        Const ox = ov.posX * W;
-        Const oy = Ov.posY * H;
-        Const size = Math.min(W, H) * Ov.scale;
-        
-        If (ox + size < 0 || ox - size > W || oy + size < 0 || oy - size > H) {
-          Return;
-        }
-        
-        If(!overlayParticlesRef.current[Ov.instanceId]){
-          If(Ov.defId.startsWith("custom:")){
-            Const co=customOverlaysRef.current.find(c=>Ov.defId===`custom:${c.id}`);
-            If(Co)overlayParticlesRef.current[Ov.instanceId]=InitCustomParticles(W,H,Co);
-          }Else{
-            Const def=OVERLAY_BY_ID[Ov.defId];
-            If(Def)overlayParticlesRef.current[Ov.instanceId]=Def.initParticles(W,H,OV.params);
+        const ox=ov.posX*W;
+        const oy=ov.posY*H;
+        const size=Math.min(W,H)*ov.scale;
+
+        if(ox+size<0||ox-size>W||oy+size<0||oy-size>H) return;
+
+        if(!overlayParticlesRef.current[ov.instanceId]){
+          if(ov.defId.startsWith("custom:")){
+            const co=customOverlaysRef.current.find(c=>ov.defId===`custom:${c.id}`);
+            if(co) overlayParticlesRef.current[ov.instanceId]=initCustomParticles(W,H,co);
+          } else {
+            const def=OVERLAY_BY_ID[ov.defId];
+            if(def) overlayParticlesRef.current[ov.instanceId]=def.initParticles(W,H,ov.params);
           }
         }
-        
-        Const ps=overlayParticlesRef.current[Ov.instanceId];
-        If(!Ps)Return;
-        
-        Ctx.Save();
-        Ctx.Translate(Ov.posX*W, Ov.posY*H);
-        Ctx.Scale(Ov.scale, Ov.scale);
-        Ctx.Rotate(Ov.rotation);
-        Ctx.GlobalAlpha = Ov.opacity;
-        
-        If(Ov.defId.startsWith("custom:")){
-          Const co=customOverlaysRef.current.find(c=>Ov.defId===`custom:${c.id}`);
-          If(Co)drawCustomOverlay(ctx,W,H,t,Co,ps);
-        }Else{
-          Const def=OVERLAY_BY_ID[Ov.defId];
-          If(Def)def.draw(ctx,W,H,t,ps,OV.params);
+
+        const ps=overlayParticlesRef.current[ov.instanceId];
+        if(!ps) return;
+
+        ctx.save();
+        ctx.translate(ov.posX*W,ov.posY*H);
+        ctx.scale(ov.scale,ov.scale);
+        ctx.rotate(ov.rotation);
+        ctx.globalAlpha=ov.opacity;
+
+        if(ov.defId.startsWith("custom:")){
+          const co=customOverlaysRef.current.find(c=>ov.defId===`custom:${c.id}`);
+          if(co) drawCustomOverlay(ctx,W,H,t,co,ps);
+        } else {
+          const def=OVERLAY_BY_ID[ov.defId];
+          if(def) def.draw(ctx,W,H,t,ps,ov.params);
         }
-        
+
         // Overlay selection ring
-        If(selOvRef.current===Ov.instanceId){
-          Ctx.StrokeStyle="rgba(150,100,255,0.8)";
-          Ctx.LineWidth=3;
-          Ctx.SetLineDash([6,4]);
-          Ctx.StrokeRect(-W*0.5,-H*0.5,W,H);
-          Ctx.SetLineDash([]);
-          
-          Const hw=W*0.5, hh=H*0.5;
-          [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].ForEach(([hx,hy])=>{
-            Ctx.FillStyle="#fff";
-            Ctx.StrokeStyle="#aa66ff";
-            Ctx.LineWidth=2;
-            Ctx.BeginPath();
-            Ctx.Arc(hx,hy,8,0,Math.PI*2);
-            Ctx.Fill();
-            Ctx.Stroke();
+        if(selOvRef.current===ov.instanceId){
+          ctx.strokeStyle="rgba(150,100,255,0.8)";
+          ctx.lineWidth=3;
+          ctx.setLineDash([6,4]);
+          ctx.strokeRect(-W*0.5,-H*0.5,W,H);
+          ctx.setLineDash([]);
+
+          const hw=W*0.5,hh=H*0.5;
+          [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].forEach(([hx,hy])=>{
+            ctx.fillStyle="#fff";
+            ctx.strokeStyle="#aa66ff";
+            ctx.lineWidth=2;
+            ctx.beginPath();
+            ctx.arc(hx,hy,8,0,Math.PI*2);
+            ctx.fill();
+            ctx.stroke();
           });
-          
-          Ctx.StrokeStyle="rgba(150,100,255,0.6)";
-          Ctx.LineWidth=1;
-          Ctx.SetLineDash([]);
-          Ctx.BeginPath();
-          Ctx.MoveTo(0,-hh);
-          Ctx.LineTo(0,-hh-30);
-          Ctx.Stroke();
-          Ctx.FillStyle="#fff";
-          Ctx.StrokeStyle="#aa66ff";
-          Ctx.LineWidth=2;
-          Ctx.BeginPath();
-          Ctx.Arc(0,-hh-30,6,0,Math.PI*2);
-          Ctx.Fill();
-          Ctx.Stroke();
+
+          ctx.strokeStyle="rgba(150,100,255,0.6)";
+          ctx.lineWidth=1;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.moveTo(0,-hh);
+          ctx.lineTo(0,-hh-30);
+          ctx.stroke();
+          ctx.fillStyle="#fff";
+          ctx.strokeStyle="#aa66ff";
+          ctx.lineWidth=2;
+          ctx.beginPath();
+          ctx.arc(0,-hh-30,6,0,Math.PI*2);
+          ctx.fill();
+          ctx.stroke();
         }
-        Ctx.Restore();
+        ctx.restore();
       });
-      
+
       // Draw text layers with optional transition
-      LayersRef.current.forEach(l=>{
-        Ctx.Save();
-        If (textTransition !== "none" && isTransitioning) {
-          applyTransition(ctx, W, H, transitionProgress, textTransition, textTransitionParams, true);
+      layersRef.current.forEach(l=>{
+        ctx.save();
+        if(textTransition!=="none" && isTransitioning){
+          applyTransition(ctx,W,H,transitionProgress,textTransition,textTransitionParams,true);
         }
-        DrawLayer(l,W,H,t);
-        If (textTransition !== "none" && isTransitioning) {
+        drawLayer(l,W,H,t);
+        if(textTransition!=="none" && isTransitioning){
           cleanupTransition(ctx);
         }
-        Ctx.Restore();
+        ctx.restore();
       });
-      
+
       AnimFrameRef.current=requestAnimationFrame(render);
     };
-    
+
     AnimFrameRef.current=requestAnimationFrame(render);
-    Return()=>{running=false;cancelAnimationFrame(AnimFrameRef.current);};
-  },[CanvasPreset, textTransition, isTransitioning, transitionProgress, mediaTransition]);
+    return ()=>{running=false;cancelAnimationFrame(AnimFrameRef.current);};
+  },[canvasPreset,textTransition,isTransitioning,transitionProgress,mediaTransition]);
 
   // Mouse Interactions
-  Const toCanvas=(e:React.MouseEvent<HTMLCanvasElement>|MouseEvent)=>{
-    Const Cv=CanvasRef.current!;
-    Const rect=cv.getBoundingClientRect();
-    Return{
-      x:(("clientX" in e?e.clientX:0)-rect.left)*(Cv.width/rect.width),
-      y:(("clientY" in e?e.clientY:0)-rect.top)*(Cv.height/rect.height)
+  const toCanvas=(e:React.MouseEvent<HTMLCanvasElement>|MouseEvent)=>{
+    const cv=canvasRef.current!;
+    const rect=cv.getBoundingClientRect();
+    return{
+      x:(("clientX" in e?e.clientX:0)-rect.left)*(cv.width/rect.width),
+      y:(("clientY" in e?e.clientY:0)-rect.top)*(cv.height/rect.height)
     };
   };
-  
-  Const dragging=useRef(false),dragId=UseRef<string|null>(null);
-  Const dragStartMouse=UseRef({x:0,y:0}),dragStartPos=UseRef({x:0,y:0});
-  Const resizing=UseRef(false),resizeStartY=UseRef(0),resizeStartSize=UseRef(0);
-  Const rotating=UseRef(false),rotateStartAngle=UseRef(0),rotateStartRot=UseRef(0),rotateCenter=UseRef({x:0,y:0});
-  
-  Const ovDragging = UseRef(false);
-  Const ovResizing = UseRef(false);
-  Const ovRotating = UseRef(false);
-  Const ovDragStart = UseRef({x:0,y:0});
-  Const ovDragStartPos = UseRef({x:0,y:0});
-  Const ovResizeStart = UseRef({x:0,y:0,scale:1});
-  Const ovRotateStart = UseRef({angle:0,rotation:0});
 
-  Const handleCanvasMouseDown=(e:React.MouseEvent<HTMLCanvasElement>)=>{
-    Const {x,y}=toCanvas(e);
-    Const W=canvasPreset.w,H=canvasPreset.h;
-    
+  const dragging      = useRef(false);
+  const dragId        = useRef<string|null>(null);
+  const dragStartMouse = useRef({x:0,y:0});
+  const dragStartPos  = useRef({x:0,y:0});
+  const resizing      = useRef(false);
+  const resizeStartY  = useRef(0);
+  const resizeStartSize = useRef(0);
+  const rotating      = useRef(false);
+  const rotateStartAngle = useRef(0);
+  const rotateStartRot   = useRef(0);
+  const rotateCenter  = useRef({x:0,y:0});
+
+  const ovDragging    = useRef(false);
+  const ovResizing    = useRef(false);
+  const ovRotating    = useRef(false);
+  const ovDragStart   = useRef({x:0,y:0});
+  const ovDragStartPos = useRef({x:0,y:0});
+  const ovResizeStart = useRef({x:0,y:0,scale:1});
+  const ovRotateStart = useRef({angle:0,rotation:0});
+
+  const handleCanvasMouseDown=(e:React.MouseEvent<HTMLCanvasElement>)=>{
+    const {x,y}=toCanvas(e);
+    const W=canvasPreset.w,H=canvasPreset.h;
+
     // Check media first
-    If (bgImage || bgVideo) {
-      Const mediaX = W/2 + (bgTransform.x - 0.5) * W * 0.5;
-      Const mediaY = H/2 + (bgTransform.y - 0.5) * H * 0.5
-      Const mediaSize = Math.min(W, H) * bgTransform.scale
-      
-      If (Math.abs(x - mediaX) < mediaSize/2 && Math.abs(y - mediaY) < mediaSize/2) {
-        setSelectedMedia(bgVideo ? "bg-video" : "bg-image");
-        SetSelectedLayerId(null);
-        SetSelectedOverlayInstance(null);
-        SetEditingOverlay(null);
-        
-        // Start media drag
-        OvDragging.current = true;
-        OvDragStart.current = {x, y};
-        OvDragStartPos.current = {x: bgTransform.x, y: bgTransform.y};
-        Return;
+    if(bgImage||bgVideo){
+      const mediaX    = W/2+(bgTransform.x-0.5)*W*0.5;
+      const mediaY    = H/2+(bgTransform.y-0.5)*H*0.5;
+      const mediaSize = Math.min(W,H)*bgTransform.scale;
+
+      if(Math.abs(x-mediaX)<mediaSize/2 && Math.abs(y-mediaY)<mediaSize/2){
+        setSelectedMedia(bgVideo?"bg-video":"bg-image");
+        setSelectedLayerId(null);
+        setSelectedOverlayInstance(null);
+        setEditingOverlay(null);
+
+        ovDragging.current=true;
+        ovDragStart.current={x,y};
+        ovDragStartPos.current={x:bgTransform.x,y:bgTransform.y};
+        return;
       }
     }
-    
+
     // Check overlay hit (reverse order = top first)
-    Const hitOv = [...activeOverlaysRef.current].reverse().find(ov => hitTestOverlay(ov, x, y, W, H));
-    If (hitOv) {
-      SetSelectedOverlayInstance(hitOv.instanceId);
-      SetSelectedLayerId(null);
-      SetSelectedMedia(null);
-      SetEditingOverlay(hitOv.instanceId);
-      
-      Const ox = hitOv.posX * W, oy = HitOv.posY * H;
-      Const rotHandleY = oy - Math.min(W,H)*hitOv.scale*0.3 - 30;
-      
-      If (Math.hypot(x - ox, y - rotHandleY) < 12) {
-        OvRotating.current = true;
-        OvRotateStart.current = {
-          angle: Math.atan2(y - oy, x - ox),
-          rotation: hitOv.rotation
+    const hitOv=[...activeOverlaysRef.current].reverse().find(ov=>hitTestOverlay(ov,x,y,W,H));
+    if(hitOv){
+      setSelectedOverlayInstance(hitOv.instanceId);
+      setSelectedLayerId(null);
+      setSelectedMedia(null);
+      setEditingOverlay(hitOv.instanceId);
+
+      const ox=hitOv.posX*W,oy=hitOv.posY*H;
+      const rotHandleY=oy-Math.min(W,H)*hitOv.scale*0.3-30;
+
+      if(Math.hypot(x-ox,y-rotHandleY)<12){
+        ovRotating.current=true;
+        ovRotateStart.current={
+          angle:Math.atan2(y-oy,x-ox),
+          rotation:hitOv.rotation
         };
-        Return;
+        return;
       }
-      
-      Const size = Math.min(W,H) * hitOv.scale * 0.3;
-      If (Math.hypot(x - (ox + size), y - (oy + size)) < 14) {
-        OvResizing.current = true;
-        OvResizeStart.current = {x, y, scale: hitOv.scale};
-        Return;
+
+      const size=Math.min(W,H)*hitOv.scale*0.3;
+      if(Math.hypot(x-(ox+size),y-(oy+size))<14){
+        ovResizing.current=true;
+        ovResizeStart.current={x,y,scale:hitOv.scale};
+        return;
       }
-      
-      OvDragging.current = true;
-      OvDragStart.current = {x, y};
-      OvDragStartPos.current = {x: hitOv.posX, y: hitOv.posY};
-      Return;
+
+      ovDragging.current=true;
+      ovDragStart.current={x,y};
+      ovDragStartPos.current={x:hitOv.posX,y:hitOv.posY};
+      return;
     }
-    
+
     // Text layer handling
-    If(selectedLayerId){
-      Const sel=LayersRef.current.find(l=>l.id===selectedLayerId);
-      If(Sel){
-        Const cx=sel.x*W,cy=Sel.y*H,hh=Sel._h/2+10;
-        Const rotHX=cx+Math.cos(Sel.rotation-Math.PI/2)*(hh+25);
-        Const rotHY=cy+Math.sin(Sel.rotation-Math.PI/2)*(hh+25);
-        
-        If(Math.hypot(x-rotHX,y-rotHY)<12){
+    if(selectedLayerId){
+      const sel=layersRef.current.find(l=>l.id===selectedLayerId);
+      if(sel){
+        const cx=sel.x*W,cy=sel.y*H,hh=sel._h/2+10;
+        const rotHX=cx+Math.cos(sel.rotation-Math.PI/2)*(hh+25);
+        const rotHY=cy+Math.sin(sel.rotation-Math.PI/2)*(hh+25);
+
+        if(Math.hypot(x-rotHX,y-rotHY)<12){
           rotating.current=true;
           rotateCenter.current={x:cx,y:cy};
           rotateStartAngle.current=Math.atan2(y-cy,x-cx);
-          rotateStartRot.current=Sel.rotation;
-          Return;
+          rotateStartRot.current=sel.rotation;
+          return;
         }
-        
-        Const hw=Sel._w/2+10,cos=Math.cos(Sel.rotation),sin=Math.sin(Sel.rotation);
-        Const brX=cx+(hw*cos-hh*sin),brY=cy+(hw*sin+hh*cos);
-        
-        If(Math.hypot(x-brX,y-brY)<14){
+
+        const hw=sel._w/2+10,cos=Math.cos(sel.rotation),sin=Math.sin(sel.rotation);
+        const brX=cx+(hw*cos-hh*sin),brY=cy+(hw*sin+hh*cos);
+
+        if(Math.hypot(x-brX,y-brY)<14){
           resizing.current=true;
           resizeStartY.current=y;
-          ResizeStartSize.current=Sel.fontSize;
-          dragId.current=Sel.id;
-          Return;
+          resizeStartSize.current=sel.fontSize;
+          dragId.current=sel.id;
+          return;
         }
       }
     }
-    
-    Const hit=[...LayersRef.current].reverse().find(l=>hitTest(l,x,y,W,H));
-    If(Hit){
-      SetSelectedLayerId(hit.id);
-      SetSelectedOverlayInstance(null);
-      SetSelectedMedia(null);
-      SetEditingOverlay(null);
+
+    const hit=[...layersRef.current].reverse().find(l=>hitTest(l,x,y,W,H));
+    if(hit){
+      setSelectedLayerId(hit.id);
+      setSelectedOverlayInstance(null);
+      setSelectedMedia(null);
+      setEditingOverlay(null);
       dragging.current=true;
       dragId.current=hit.id;
       dragStartMouse.current={x,y};
       dragStartPos.current={x:hit.x,y:hit.y};
-    } Else {
-      SetSelectedLayerId(null);
-      SetSelectedOverlayInstance(null);
-      SetSelectedMedia(null);
-      SetEditingOverlay(null);
+    } else {
+      setSelectedLayerId(null);
+      setSelectedOverlayInstance(null);
+      setSelectedMedia(null);
+      setEditingOverlay(null);
     }
   };
-  
+
   useEffect(()=>{
-    Const onMove=(e:MouseEvent)=>{
-      If(!CanvasRef.current)Return;
-      Const{x,y}=toCanvas(e);
-      Const W=canvasPreset.w,H=canvasPreset.h;
-      
-      // Media drag
-      If(ovDragging.current && selectedMedia){
-        Const dx = x - ovDragStart.current.x;
-        Const dy = y - ovDragStart.current.y;
-        SetBgTransform(prev => ({
+    const onMove=(e:MouseEvent)=>{
+      if(!canvasRef.current) return;
+      const{x,y}=toCanvas(e);
+      const W=canvasPreset.w,H=canvasPreset.h;
+
+      if(ovDragging.current && selectedMedia){
+        const dx=x-ovDragStart.current.x;
+        const dy=y-ovDragStart.current.y;
+        setBgTransform(prev=>({
           ...prev,
-          x: Math.max(0, Math.min(1, ovDragStartPos.current.x + dx/W)),
-          y: Math.max(0, Math.min(1, ovDragStartPos.current.y + dy/H))
+          x:Math.max(0,Math.min(1,ovDragStartPos.current.x+dx/W)),
+          y:Math.max(0,Math.min(1,ovDragStartPos.current.y+dy/H))
         }));
-      }
-      // Overlay transforms
-      Else If(ovDragging.current && selectedOverlayInstance){
-        Const dx = x - ovDragStart.current.x;
-        Const dy = y - ovDragStart.current.y;
-        SetActiveOverlays(prev => prev.map(o => 
-          o.instanceId === selectedOverlayInstance 
-            ? {...o, posX: Math.max(0, Math.min(1, ovDragStartPos.current.x + dx/W)), posY: Math.max(0, Math.min(1, ovDragStartPos.current.y + dy/H))}
-            : o
+      } else if(ovDragging.current && selectedOverlayInstance){
+        const dx=x-ovDragStart.current.x;
+        const dy=y-ovDragStart.current.y;
+        setActiveOverlays(prev=>prev.map(o=>
+          o.instanceId===selectedOverlayInstance
+            ?{...o,posX:Math.max(0,Math.min(1,ovDragStartPos.current.x+dx/W)),posY:Math.max(0,Math.min(1,ovDragStartPos.current.y+dy/H))}
+            :o
         ));
-      }
-      Else If(ovResizing.current && selectedOverlayInstance){
-        Const dy = y - ovResizeStart.current.y;
-        Const newScale = Math.max(0.1 = Math.min(5, ovResizeStart.current.scale + dy * 0.005));
-        SetActiveOverlays(prev => prev.map(o => 
-          o.instanceId === selectedOverlayInstance ? {...o, scale: newScale} : o
+      } else if(ovResizing.current && selectedOverlayInstance){
+        const dy=y-ovResizeStart.current.y;
+        const newScale=Math.max(0.1,Math.min(5,ovResizeStart.current.scale+dy*0.005));
+        setActiveOverlays(prev=>prev.map(o=>
+          o.instanceId===selectedOverlayInstance?{...o,scale:newScale}:o
         ));
-      }
-      Else If(ovRotating.current && selectedOverlayInstance){
-        Const ov = activeOverlaysRef.current.find(o => o.instanceId === selectedOverlayInstance);
-        If(Ov){
-          Const Angle = Math.atan2(y - Ov.posY*H, x - Ov.posX*W);
-          SetActiveOverlays(prev => prev.map(o => 
-            O.instanceId === selectedOverlayInstance 
-              ? {...O, rotation: OvRotateStart.current.rotation + (angle - OvRotateStart.current.angle)}
-              : o
+      } else if(ovRotating.current && selectedOverlayInstance){
+        const ov=activeOverlaysRef.current.find(o=>o.instanceId===selectedOverlayInstance);
+        if(ov){
+          const angle=Math.atan2(y-ov.posY*H,x-ov.posX*W);
+          setActiveOverlays(prev=>prev.map(o=>
+            o.instanceId===selectedOverlayInstance
+              ?{...o,rotation:ovRotateStart.current.rotation+(angle-ovRotateStart.current.angle)}
+              :o
           ));
         }
-      }
-      // Text layer transforms
-      Else If(dragging.current&&dragId.current){
-        Const dx=x-dragStartMouse.current.x,dy=y-dragStartMouse.current.y;
-        UpdateLayer(dragId.current,{
+      } else if(dragging.current && dragId.current){
+        const dx=x-dragStartMouse.current.x,dy=y-dragStartMouse.current.y;
+        updateLayer(dragId.current,{
           x:Math.max(0,Math.min(1,dragStartPos.current.x+dx/W)),
           y:Math.max(0,Math.min(1,dragStartPos.current.y+dy/H))
         });
-      }
-      Else If(resizing.current&&dragId.current){
-        Const dy=y-resizeStartY.current;
-        Const ns=Math.max(8,Math.min(600,resizeStartSize.current+dy*0.5));
-        UpdateLayer(dragId.current,{fontSize:Math.round(ns)});
-      }
-      Else If(rotating.current&&selectedIdRef.current){
-        Const Angle=Math.atan2(y-rotateCenter.current.y,x-rotateCenter.current.x);
-        UpdateLayer(selectedIdRef.current,{rotation:rotateStartRot.current+(angle-rotateStartAngle.current)});
+      } else if(resizing.current && dragId.current){
+        const dy=y-resizeStartY.current;
+        const ns=Math.max(8,Math.min(600,resizeStartSize.current+dy*0.5));
+        updateLayer(dragId.current,{fontSize:Math.round(ns)});
+      } else if(rotating.current && selectedIdRef.current){
+        const angle=Math.atan2(y-rotateCenter.current.y,x-rotateCenter.current.x);
+        updateLayer(selectedIdRef.current,{rotation:rotateStartRot.current+(angle-rotateStartAngle.current)});
       }
     };
-    
-    Const onUp=()=>{
+
+    const onUp=()=>{
       dragging.current=false;
       resizing.current=false;
       rotating.current=false;
@@ -1229,152 +1218,154 @@ export default function TextAnimator() {
       ovResizing.current=false;
       ovRotating.current=false;
     };
-    
+
     window.addEventListener("mousemove",onMove);
-    Window.addEventListener("mouseup",onUp);
-    Return()=>{
-      Window.removeEventListener("mousemove",onMove);
-      Window.removeEventListener("mouseup",onUp);
+    window.addEventListener("mouseup",onUp);
+    return ()=>{
+      window.removeEventListener("mousemove",onMove);
+      window.removeEventListener("mouseup",onUp);
     };
-  },[CanvasPreset,UpdateLayer,selectedOverlayInstance,selectedMedia,bgTransform]);
+  },[canvasPreset,updateLayer,selectedOverlayInstance,selectedMedia,bgTransform]);
 
   // Export & Recording
-  Const handleExportPng=()=>{
-    Const Cv=CanvasRef.current;
-    If(!Cv)Return;
-    Const a=document.createElement("a");
-    a.href=Cv.toDataURL("image/png");
+  const handleExportPng=()=>{
+    const cv=canvasRef.current;
+    if(!cv) return;
+    const a=document.createElement("a");
+    a.href=cv.toDataURL("image/png");
     a.download=`horror-overlay-${canvasPreset.w}x${canvasPreset.h}.png`;
     a.click();
   };
 
-  Const startRecording=()=>{
-    Const Cv=CanvasRef.current;
-    If(!Cv)Return;
+  const startRecording=()=>{
+    const cv=canvasRef.current;
+    if(!cv) return;
     chunksRef.current=[];
     setRecordingTime(0);
-    Const videoStream=Cv.captureStream(30);
-    Let finalStream=videoStream;
-    Const Vid=BgVideoRef.current;
-    
-    If(Vid&&!Vid.muted){
+    const videoStream=cv.captureStream(30);
+    let finalStream:MediaStream=videoStream;
+    const vid=bgVideoRef.current;
+
+    if(vid&&!vid.muted){
       try{
-        If(!audioCtxRef.current)audioCtxRef.current=new AudioContext();
-        Const Actx=audioCtxRef.current;
-        If(!audioDestRef.current)audioDestRef.current=Actx.createMediaStreamDestination();
-        If(audioSourceRef.current){try{audioSourceRef.current.disconnect();}catch{}}
-        audioSourceRef.current=Actx.createMediaElementSource(Vid);
+        if(!audioCtxRef.current) audioCtxRef.current=new AudioContext();
+        const actx=audioCtxRef.current;
+        if(!audioDestRef.current) audioDestRef.current=actx.createMediaStreamDestination();
+        if(audioSourceRef.current){try{audioSourceRef.current.disconnect();}catch{}}
+        audioSourceRef.current=actx.createMediaElementSource(vid);
         audioSourceRef.current.connect(audioDestRef.current);
-        audioSourceRef.current.connect(Actx.destination);
+        audioSourceRef.current.connect(actx.destination);
         finalStream=new MediaStream([...videoStream.getVideoTracks(),...audioDestRef.current.stream.getAudioTracks()]);
       }catch(err){console.warn("Audio capture failed:",err);}
     }
-    
-    If (audioRef.current && audioDestRef.current) {
-      try {
-        Const AudioStream = audioRef.current.captureStream ? audioRef.current.captureStream() : null;
-        If (AudioStream) {
-          finalStream = new MediaStream([...finalStream.getTracks(), ...AudioStream.getAudioTracks()]);
+
+    if(audioRef.current && audioDestRef.current){
+      try{
+        const audioStream=(audioRef.current as any).captureStream?.()||null;
+        if(audioStream){
+          finalStream=new MediaStream([...finalStream.getTracks(),...audioStream.getAudioTracks()]);
         }
-      } catch(err) {}
+      }catch{}
     }
-    
-    Const mimeType=MediaRecorder.isTypeSupported("video/webm;codecs=vp9")?"video/webm;codecs=vp9":MediaRecorder.isTypeSupported("video/webm;codecs=vp8")?"video/webm;codecs=vp8":"video/webm";
-    Const mr=new MediaRecorder(finalStream,{mimeType,videoBitsPerSecond:8_000_000});
-    mr.ondataavailable=ev=>{If(ev.data.size>0)chunksRef.current.push(ev.data);};
+
+    const mimeType=MediaRecorder.isTypeSupported("video/webm;codecs=vp9")?"video/webm;codecs=vp9":MediaRecorder.isTypeSupported("video/webm;codecs=vp8")?"video/webm;codecs=vp8":"video/webm";
+    const mr=new MediaRecorder(finalStream,{mimeType,videoBitsPerSecond:8_000_000});
+    mr.ondataavailable=ev=>{if(ev.data.size>0) chunksRef.current.push(ev.data);};
     mr.onstop=()=>{
-      Const blob=new Blob(chunksRef.current,{type:mimeType});
-      Const url=URL.createObjectURL(blob);
-      Const name=`rec-${Date.now()}.webm`;
+      const blob=new Blob(chunksRef.current,{type:mimeType});
+      const url=URL.createObjectURL(blob);
+      const name=`rec-${Date.now()}.webm`;
       setRecordings(prev=>[{name,url,size:blob.size},...prev]);
-      Const a=document.createElement("a");
+      const a=document.createElement("a");
       a.href=url;
       a.download=name;
       a.click();
     };
-    SetTimeout(()=>{
+    setTimeout(()=>{
       mr.start(250);
       mediaRecorderRef.current=mr;
       setRecording(true);
-      Let el=0;
+      let el=0;
       recTimerRef.current=setInterval(()=>{
         el++;
         setRecordingTime(el);
-        If(el>=5*60)stopRecording();
+        if(el>=5*60) stopRecording();
       },1000);
     },400);
   };
-  
-  Const stopRecording=()=>{
-    If(recTimerRef.current){clearInterval(recTimerRef.current);recTimerRef.current=null;}
-    If(mediaRecorderRef.current&&mediaRecorderRef.current.state!=="inactive"){
+
+  const stopRecording=()=>{
+    if(recTimerRef.current){clearInterval(recTimerRef.current);recTimerRef.current=null;}
+    if(mediaRecorderRef.current && mediaRecorderRef.current.state!=="inactive"){
       mediaRecorderRef.current.requestData?.();
-      SetTimeout(()=>{
-        If(mediaRecorderRef.current?.state!=="inactive")mediaRecorderRef.current?.stop();
+      setTimeout(()=>{
+        if(mediaRecorderRef.current?.state!=="inactive") mediaRecorderRef.current?.stop();
       },200);
     }
-    SetRecording(false);
+    setRecording(false);
   };
 
-  Const handleSurprise=()=>selectTemplate(allTemplates[Math.floor(Math.random()*allTemplates.length)]);
-  Const categories=["All",...(Array.isArray(TEMPLATE_CATEGORIES)?TEMPLATE_CATEGORIES:[])];
-  Const editOv=activeOverlays.find(o=>o.instanceId===editingOverlay)||null;
-  Const filteredOverlays=[
+  const handleSurprise=()=>selectTemplate(allTemplates[Math.floor(Math.random()*allTemplates.length)]);
+  const editOv=activeOverlays.find(o=>o.instanceId===editingOverlay)||null;
+  const filteredOverlays=[
     ...(Array.isArray(OVERLAY_DEFS)?OVERLAY_DEFS:[]).filter(o=>overlayCategory==="All"||o.category===overlayCategory),
-    ...(Array.isArray(customOverlays)?customOverlays:[]).filter(o=>overlayCategory==="All"||overlayCategory==="Custom"||o.category===overlayCategory).map(O=>({id:`custom:${O.id}`,label:O.name,category:O.category,emoji:O.isVideo?"🎬":"🖼️"} as any)),
+    ...(Array.isArray(customOverlays)?customOverlays:[]).filter(o=>overlayCategory==="All"||overlayCategory==="Custom"||o.category===overlayCategory).map(o=>({id:`custom:${o.id}`,label:o.name,category:o.category,emoji:o.isVideo?"🎬":"🖼️"} as any)),
   ];
 
   // TTS Voices
-  Const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
-  useEffect(() => {
-    Const LoadVoices = () => setAvailableVoices(window.speechSynthesis.getVoices());
-    LoadVoices();
-    window.speechSynthesis.onvoiceschanged = LoadVoices;
-  }, []);
+  const [availableVoices,setAvailableVoices]=useState<SpeechSynthesisVoice[]>([]);
+  useEffect(()=>{
+    const loadVoices=()=>setAvailableVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged=loadVoices;
+  },[]);
 
   // UI RENDER
-  Return (
+  return (
     <div className="h-full flex overflow-hidden">
       {/* Left Sidebar */}
       <aside className="w-64 flex-shrink-0 border-r border-red-900/20 bg-[#050508] flex flex-col overflow-hidden">
         <div className="p-3 border-b border-red-900/20">
           <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-2" style={{fontFamily:"Cinzel"}}>Text Input</h2>
           <textarea value={newText} onChange={e=>setNewText(e.target.value)} rows={2} className="w-full px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-red-700/40 resize-none" placeholder="Enter text..."/>
-          <button onClick={()=>{Const l=MakeLayer({text:newText||"TEXT",fontFamily:FONT_OPTIONS[0],color:selectedTemplate.colors[0]});setLayers(p=>[...p,l]);setSelectedLayerId(l.id);}} className="w-full mt-2 py-1.5 rounded bg-red-900/40 border border-red-700/40 text-red-300 text-xs font-bold hover:bg-red-900/60 transition-colors">+ Add Text Layer</Button>
-          <Button onClick={handleSurprise} className="w-full mt-1.5 py-1.5 rounded bg-Purple-900/20 border border-purple-700/30 text-Purple-300 text-xs font-bold hover:bg-Purple-900/40 transition-colors">Surprise Me</Button>
+          <button onClick={()=>{const l=MakeLayer({text:newText||"TEXT",fontFamily:FONT_OPTIONS[0],color:selectedTemplate.colors[0]});setLayers(p=>[...p,l]);setSelectedLayerId(l.id);}} className="w-full mt-2 py-1.5 rounded bg-red-900/40 border border-red-700/40 text-red-300 text-xs font-bold hover:bg-red-900/60 transition-colors">+ Add Text Layer</button>
+          <button onClick={handleSurprise} className="w-full mt-1.5 py-1.5 rounded bg-purple-900/20 border border-purple-700/30 text-purple-300 text-xs font-bold hover:bg-purple-900/40 transition-colors">Surprise Me</button>
         </div>
-        
+
         {/* Layers */}
         <div className="p-2 border-b border-red-900/20">
           <h2 className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1.5">Layers</h2>
           <div className="space-y-1 max-h-28 overflow-y-auto">
             {layers.map(l=>(
-              <div Key={L.id} onClick={()=>{setSelectedLayerId(l.id);setSelectedOverlayInstance(null);setSelectedMedia(null);}} className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs border transition-all ${l.id===selectedLayerId?"bg-red-900/30 border-red-700/40 text-red-200":"bg-zinc-800/40 border-zinc-800/30 text-zinc-400 hover:border-zinc-600/40"}`}>
+              <div key={l.id} onClick={()=>{setSelectedLayerId(l.id);setSelectedOverlayInstance(null);setSelectedMedia(null);}} className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs border transition-all ${l.id===selectedLayerId?"bg-red-900/30 border-red-700/40 text-red-200":"bg-zinc-800/40 border-zinc-800/30 text-zinc-400 hover:border-zinc-600/40"}`}>
                 <span className="flex-1 truncate">{l.text||"(empty)"}</span>
-                <Button onClick={e=>{e.stopPropagation();setLayers(p=>p.filter(x=>x.id!==l.id));If(selectedLayerId===l.id)setSelectedLayerId(null);}} className="text-zinc-600 hover:text-red-400 text-sm px-0.5">×</Button>
-              </div>))}
+                <button onClick={e=>{e.stopPropagation();setLayers(p=>p.filter(x=>x.id!==l.id));if(selectedLayerId===l.id)setSelectedLayerId(null);}} className="text-zinc-600 hover:text-red-400 text-sm px-0.5">×</button>
+              </div>
+            ))}
           </div>
         </div>
-        
+
         {/* Active Overlays */}
-        {activeOverlays.length > 0 && (
+        {activeOverlays.length>0 && (
           <div className="p-2 border-b border-red-900/20">
-            <h2 className="text-[9px] text-Purple-400 uppercase tracking-widest mb-1.5">Active Overlays</h2>
+            <h2 className="text-[9px] text-purple-400 uppercase tracking-widest mb-1.5">Active Overlays</h2>
             <div className="space-y-1 max-h-24 overflow-y-auto">
               {activeOverlays.map(ov=>(
-                <Div Key={Ov.instanceId} onClick={()=>{setSelectedOverlayInstance(ov.instanceId);setSelectedLayerId(null);setSelectedMedia(null);setEditingOverlay(ov.instanceId);}} className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs border transition-all ${Ov.instanceId===selectedOverlayInstance?"bg-Purple-900/30 border-Purple-700/40 text-Purple-200":"bg-zinc-800/40 border-zinc-800/30 text-zinc-400 hover:border-zinc-600/40"}`}>
+                <div key={ov.instanceId} onClick={()=>{setSelectedOverlayInstance(ov.instanceId);setSelectedLayerId(null);setSelectedMedia(null);setEditingOverlay(ov.instanceId);}} className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs border transition-all ${ov.instanceId===selectedOverlayInstance?"bg-purple-900/30 border-purple-700/40 text-purple-200":"bg-zinc-800/40 border-zinc-800/30 text-zinc-400 hover:border-zinc-600/40"}`}>
                   <span className="flex-1 truncate">{ov.emoji} {ov.label}</span>
-                  <Button onClick={e=>{e.stopPropagation();removeOverlay(ov.instanceId);}} className="text-zinc-600 hover:text-red-400 text-sm px-0.5">×</Button>
-                </Div>
+                  <button onClick={e=>{e.stopPropagation();removeOverlay(ov.instanceId);}} className="text-zinc-600 hover:text-red-400 text-sm px-0.5">×</button>
+                </div>
               ))}
-            </Div>
-          </Div>
+            </div>
+          </div>
         )}
-        
+
         {/* Template Categories */}
         <div className="p-2 border-b border-red-900/20">
           <div className="flex flex-wrap gap-1">
-            {categories.map(cat=>(<Button Key={Cat} onClick={()=>setActiveCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] font-medium transition-all border ${activeCategory===cat?"bg-red-900/30 border-red-700/40 text-red-300":"border-transparent text-zinc-500 hover:text-zinc-300"}`}>{cat}</Button>))}
+            {categories.map(cat=>(
+              <button key={cat} onClick={()=>setActiveCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] font-medium transition-all border ${activeCategory===cat?"bg-red-900/30 border-red-700/40 text-red-300":"border-transparent text-zinc-500 hover:text-zinc-300"}`}>{cat}</button>
+            ))}
           </div>
         </div>
         <div className="p-2 border-b border-zinc-800/30">
@@ -1391,23 +1382,23 @@ export default function TextAnimator() {
       {/* Center */}
       <div className="flex-1 flex flex-col p-3 overflow-hidden min-w-0">
         <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-          <h1 className="text-lg font-black text-Purple-400" style={{fontFamily:"Cinzel"}}>TEXT OVERLAY ANIMATOR</h1>
+          <h1 className="text-lg font-black text-purple-400" style={{fontFamily:"Cinzel"}}>TEXT OVERLAY ANIMATOR</h1>
           <div className="flex items-center gap-2 text-xs">
             <span className="text-zinc-600">Template:</span><span className="text-zinc-300">{selectedTemplate.name}</span>
           </div>
         </div>
-        
+
         {/* Canvas size */}
         <div className="relative mb-2">
-          <Button onClick={()=>setShowSizeMenu(v=>!v)} className="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-Purple-700/40 transition-colors w-full max-w-sm">
+          <button onClick={()=>setShowSizeMenu(v=>!v)} className="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/40 transition-colors w-full max-w-sm">
             <span className="text-zinc-500 text-[10px]">📐</span><span className="flex-1 text-left truncate">{canvasPreset.label}</span><span className="text-zinc-500 text-[10px] font-bold">{canvasPreset.w}×{canvasPreset.h}</span>
-          </Button>
+          </button>
           {showSizeMenu && (
             <div className="absolute z-20 mt-1 w-full max-w-sm rounded bg-zinc-900 border border-zinc-700/40 shadow-xl">
               {CANVAS_PRESETS.map(p=>(
-                <Button Key={P.label} onClick={()=>{setCanvasPreset(P);setShowSizeMenu(false);}} className={`block w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800/60 ${canvasPreset.label===P.label?"text-Purple-300 bg-Purple-900/10":"text-zinc-400"}`}>
-                  {P.label}
-                </Button>
+                <button key={p.label} onClick={()=>{setCanvasPreset(p);setShowSizeMenu(false);}} className={`block w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800/60 ${canvasPreset.label===p.label?"text-purple-300 bg-purple-900/10":"text-zinc-400"}`}>
+                  {p.label}
+                </button>
               ))}
             </div>
           )}
@@ -1422,58 +1413,52 @@ export default function TextAnimator() {
         <div className="mt-2 flex items-center gap-2 flex-wrap flex-shrink-0">
           <input ref={bgFileRef} type="file" accept="image/*" onChange={handleBgUpload} className="hidden"/>
           <input ref={bgVidRef} type="file" accept="video/*" onChange={handleVideoUpload} className="hidden"/>
-          <Button onClick={()=>bgFileRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-Purple-700/40">🖼️ BG Image</Button>
-          <Button onClick={()=>bgVidRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-Purple-700/40">🎬 BG Video</Button>
+          <button onClick={()=>bgFileRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/40">🖼️ BG Image</button>
+          <button onClick={()=>bgVidRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/40">🎬 BG Video</button>
           <select value={bgObjectFit} onChange={e=>setBgObjectFit(e.target.value as any)} className="px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 focus:outline-none">
             <option value="cover">Cover</option>
             <option value="contain">Contain</option>
             <option value="fill">Fill</option>
           </select>
-          <Button onClick={clearBg} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-red-700/40">Clear BG</Button>
+          <button onClick={clearBg} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-red-700/40">Clear BG</button>
           <div className="h-4 w-px bg-zinc-800/40"/>
-          <Button onClick={handleExportPng} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-green-700/40">📸 Export PNG</Button>
-          <Button onClick={recording?stopRecording:startRecording} className={`px-3 py-1.5 rounded border text-xs font-bold transition-all ${recording?"bg-red-900/40 border-red-700/40 text-red-300 animate-pulse":"bg-zinc-800/60 border-zinc-700/40 text-zinc-300 hover:border-red-700/40"}`}>
+          <button onClick={handleExportPng} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-green-700/40">📸 Export PNG</button>
+          <button onClick={recording?stopRecording:startRecording} className={`px-3 py-1.5 rounded border text-xs font-bold transition-all ${recording?"bg-red-900/40 border-red-700/40 text-red-300 animate-pulse":"bg-zinc-800/60 border-zinc-700/40 text-zinc-300 hover:border-red-700/40"}`}>
             {recording?`⏹ Stop (${fmt(recordingTime)})`:"🔴 Record"}
-          </Button>
-          <Button onClick={()=>setShowRecordings(v=>!v)} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-Purple-700/40">📁 Recordings ({recordings.length})</Button>
-          <Button onClick={saveProject} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-green-700/40">💾 Save</Button>
+          </button>
+          <button onClick={()=>setShowRecordings(v=>!v)} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/40">📁 Recordings ({recordings.length})</button>
+          <button onClick={saveProject} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-green-700/40">💾 Save</button>
           <input ref={loadProjectRef} type="file" accept=".json" onChange={loadProject} className="hidden"/>
-          <Button onClick={()=>loadProjectRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-green-700/40">📂 Load</Button>
-          
+          <button onClick={()=>loadProjectRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-green-700/40">📂 Load</button>
+
           {/* Auto-save status */}
           <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-            {isSaving ? (
-              <>
-                <span className="animate-spin">💾</span>
-                <span>Saving...</span>
-              </>
-            ) : lastSaved ? (
-              <>
-                <span className="text-green-500">✓</span>
-                <span>Auto-saved {lastSaved.toLocaleTimeString()}</span>
-              </>
-            ) : (
+            {isSaving?(
+              <><span className="animate-spin">💾</span><span>Saving...</span></>
+            ):lastSaved?(
+              <><span className="text-green-500">✓</span><span>Auto-saved {lastSaved.toLocaleTimeString()}</span></>
+            ):(
               <span>Auto-save enabled</span>
             )}
           </div>
-          
-          <Button onClick={saveNow} disabled={isSaving} className="px-3 py-1.5 rounded bg-green-900/40 border border-green-700/40 text-xs text-green-300 hover:bg-green-900/60 disabled:opacity-50">
-            {isSaving ? "💾 Saving..." : "💾 Save Now"}
-          </Button>
-          
-          <Button onClick={() => exportProjectBackup(getProjectData())} className="px-3 py-1.5 rounded bg-yellow-900/40 border border-yellow-700/40 text-xs text-yellow-300 hover:bg-yellow-900/60">
+
+          <button onClick={saveNow} disabled={isSaving} className="px-3 py-1.5 rounded bg-green-900/40 border border-green-700/40 text-xs text-green-300 hover:bg-green-900/60 disabled:opacity-50">
+            {isSaving?"💾 Saving...":"💾 Save Now"}
+          </button>
+
+          <button onClick={()=>exportProjectBackup(getProjectData())} className="px-3 py-1.5 rounded bg-yellow-900/40 border border-yellow-700/40 text-xs text-yellow-300 hover:bg-yellow-900/60">
             📥 Export Backup
-          </Button>
+          </button>
         </div>
 
         {showRecordings && (
           <div className="mt-2 rounded border border-zinc-800/40 bg-[#0a0a14] p-2 max-h-32 overflow-y-auto">
             {recordings.length===0?<div className="text-xs text-zinc-600">No recordings yet</div>:recordings.map((r,i)=>(
-              <div Key={I} className="flex items-center justify-between py-1 border-b border-zinc-800/30 last:border-0">
+              <div key={i} className="flex items-center justify-between py-1 border-b border-zinc-800/30 last:border-0">
                 <span className="text-xs text-zinc-400">{r.name}</span>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-zinc-600">{(r.size/1024/1024).toFixed(1)} MB</span>
-                  <a href={r.url} download className="text-xs text-Purple-400 hover:text-Purple-300">Download</a>
+                  <a href={r.url} download className="text-xs text-purple-400 hover:text-purple-300">Download</a>
                 </div>
               </div>
             ))}
@@ -1483,6 +1468,7 @@ export default function TextAnimator() {
 
       {/* Right Sidebar */}
       <aside className="w-72 flex-shrink-0 border-l border-red-900/20 bg-[#050508] flex flex-col overflow-hidden">
+
         {/* Text Properties */}
         {sl && (
           <div className="p-3 border-b border-red-900/20">
@@ -1496,7 +1482,7 @@ export default function TextAnimator() {
                 <div>
                   <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Font</label>
                   <select value={sl.fontFamily} onChange={e=>updateLayer(sl.id,{fontFamily:e.target.value})} className="w-full px-1 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
-                    {FONT_OPTIONS.map(f=>(<option Key={F} value={F}>{f}</option>))}
+                    {FONT_OPTIONS.map(f=>(<option key={f} value={f}>{f}</option>))}
                   </select>
                 </div>
                 <div>
@@ -1512,7 +1498,7 @@ export default function TextAnimator() {
                 <div>
                   <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Animation</label>
                   <select value={sl.animation} onChange={e=>updateLayer(sl.id,{animation:e.target.value})} className="w-full px-1 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
-                    {ALL_ANIMATIONS.map(a=>(<option Key={A} value={A}>{a}</option>))}
+                    {ALL_ANIMATIONS.map(a=>(<option key={a} value={a}>{a}</option>))}
                   </select>
                 </div>
               </div>
@@ -1529,17 +1515,17 @@ export default function TextAnimator() {
                 <input type="range" min={-10} max={50} value={sl.letterSpacing} onChange={e=>updateLayer(sl.id,{letterSpacing:Number(e.target.value)})} className="w-full accent-red-600"/>
               </div>
               <div className="flex gap-2">
-                <Button onClick={()=>updateLayer(sl.id,{bold:!sl.bold})} className={`flex-1 py-1 rounded text-xs border ${sl.bold?"bg-red-900/40 border-red-700/40 text-red-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>B</Button>
-                <Button onClick={()=>updateLayer(sl.id,{italic:!sl.italic})} className={`flex-1 py-1 rounded text-xs border ${sl.italic?"bg-red-900/40 border-red-700/40 text-red-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>I</Button>
-                <Button onClick={()=>updateLayer(sl.id,{underline:!sl.underline})} className={`flex-1 py-1 rounded text-xs border ${sl.underline?"bg-red-900/40 border-red-700/40 text-red-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>U</Button>
+                <button onClick={()=>updateLayer(sl.id,{bold:!sl.bold})} className={`flex-1 py-1 rounded text-xs border ${sl.bold?"bg-red-900/40 border-red-700/40 text-red-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>B</button>
+                <button onClick={()=>updateLayer(sl.id,{italic:!sl.italic})} className={`flex-1 py-1 rounded text-xs border ${sl.italic?"bg-red-900/40 border-red-700/40 text-red-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>I</button>
+                <button onClick={()=>updateLayer(sl.id,{underline:!sl.underline})} className={`flex-1 py-1 rounded text-xs border ${sl.underline?"bg-red-900/40 border-red-700/40 text-red-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>U</button>
               </div>
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Align</label>
                 <div className="flex gap-1">
                   {(["left","center","right"] as const).map(a=>(
-                    <Button Key={A} onClick={()=>updateLayer(sl.id,{align:a})} className={`flex-1 py-1 rounded text-xs border ${sl.align===a?"bg-red-900/40 border-red-700/40 text-red-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>
+                    <button key={a} onClick={()=>updateLayer(sl.id,{align:a})} className={`flex-1 py-1 rounded text-xs border ${sl.align===a?"bg-red-900/40 border-red-700/40 text-red-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>
                       {a==="left"?"⬅️":a==="center"?"⬆️":"➡️"}
-                    </Button>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1584,7 +1570,7 @@ export default function TextAnimator() {
         )}
 
         {/* Media Transform Controls */}
-        {(bgImage || bgVideo) && (
+        {(bgImage||bgVideo) && (
           <div className="p-3 border-b border-blue-900/20">
             <h2 className="text-[10px] text-blue-400 uppercase tracking-widest font-bold mb-2">Media Transform</h2>
             <div className="space-y-2">
@@ -1602,34 +1588,34 @@ export default function TextAnimator() {
                 <input type="range" min={0.1} max={3} step={0.05} value={bgTransform.scale} onChange={e=>setBgTransform(prev=>({...prev,scale:Number(e.target.value)}))} className="w-full accent-blue-600"/>
               </div>
               <div>
-                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Rotation: {Math.round(bgTransform.rotation * 180 / Math.PI)}°</label>
-                <input type="range" min={-180} max={180} value={Math.round(bgTransform.rotation * 180 / Math.PI)} onChange={e=>setBgTransform(prev=>({...prev,rotation:Number(e.target.value)*Math.PI/180}))} className="w-full accent-blue-600"/>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Rotation: {Math.round(bgTransform.rotation*180/Math.PI)}°</label>
+                <input type="range" min={-180} max={180} value={Math.round(bgTransform.rotation*180/Math.PI)} onChange={e=>setBgTransform(prev=>({...prev,rotation:Number(e.target.value)*Math.PI/180}))} className="w-full accent-blue-600"/>
               </div>
               <div>
-                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Opacity: {Math.round(bgTransform.opacity * 100)}%</label>
-                <input type="range" min={0} max={100} value={Math.round(bgTransform.opacity * 100)} onChange={e=>setBgTransform(prev=>({...prev,opacity:Number(e.target.value)/100}))} className="w-full accent-blue-600"/>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Opacity: {Math.round(bgTransform.opacity*100)}%</label>
+                <input type="range" min={0} max={100} value={Math.round(bgTransform.opacity*100)} onChange={e=>setBgTransform(prev=>({...prev,opacity:Number(e.target.value)/100}))} className="w-full accent-blue-600"/>
               </div>
               <div className="flex gap-1">
-                <Button onClick={()=>setBgTransform(prev=>({...prev,flipX:!prev.flipX}))} className={`flex-1 py-1 rounded text-xs border ${bgTransform.flipX?"bg-blue-900/40 border-blue-700/40 text-blue-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>↔️ Flip X</Button>
-                <Button onClick={()=>setBgTransform(prev=>({...prev,flipY:!prev.flipY}))} className={`flex-1 py-1 rounded text-xs border ${bgTransform.flipY?"bg-blue-900/40 border-blue-700/40 text-blue-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>↕️ Flip Y</Button>
+                <button onClick={()=>setBgTransform(prev=>({...prev,flipX:!prev.flipX}))} className={`flex-1 py-1 rounded text-xs border ${bgTransform.flipX?"bg-blue-900/40 border-blue-700/40 text-blue-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>↔️ Flip X</button>
+                <button onClick={()=>setBgTransform(prev=>({...prev,flipY:!prev.flipY}))} className={`flex-1 py-1 rounded text-xs border ${bgTransform.flipY?"bg-blue-900/40 border-blue-700/40 text-blue-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>↕️ Flip Y</button>
               </div>
               <div className="flex gap-1">
-                <Button onClick={()=>setBgTransform(DEFAULT_MEDIA_TRANSFORM)} className="flex-1 py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">↺ Reset</Button>
-                <Button onClick={()=>triggerTransition(mediaTransition, mediaTransitionParams)} disabled={mediaTransition==="none"} className="flex-1 py-1 rounded bg-blue-900/40 border border-blue-700/40 text-xs text-blue-300 disabled:opacity-50">▶ Play Transition</Button>
+                <button onClick={()=>setBgTransform(DEFAULT_MEDIA_TRANSFORM)} className="flex-1 py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">↺ Reset</button>
+                <button onClick={()=>triggerTransition(mediaTransition,mediaTransitionParams)} disabled={mediaTransition==="none"} className="flex-1 py-1 rounded bg-blue-900/40 border border-blue-700/40 text-xs text-blue-300 disabled:opacity-50">▶ Play Transition</button>
               </div>
             </div>
           </div>
         )}
 
         {/* Text Transition Controls */}
-        <div className="p-3 border-b border-Purple-900/20">
-          <h2 className="text-[10px] text-Purple-400 uppercase tracking-widest font-bold mb-2">Text Transition</h2>
+        <div className="p-3 border-b border-purple-900/20">
+          <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold mb-2">Text Transition</h2>
           <div className="space-y-2">
             <div>
               <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Transition</label>
               <select value={textTransition} onChange={e=>setTextTransition(e.target.value)} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
                 <option value="none">None</option>
-                {TEXT_TRANSITIONS.map(t=>(<option Key={T.id} value={T.id}>{T.emoji} {T.label}</option>))}
+                {TEXT_TRANSITIONS.map(t=>(<option key={t.id} value={t.id}>{t.emoji} {t.label}</option>))}
               </select>
             </div>
             <div>
@@ -1645,15 +1631,15 @@ export default function TextAnimator() {
             </div>
             <div>
               <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Duration: {textTransitionParams.duration}s</label>
-              <input type="range" min={0.1} max={3} step={0.1} value={textTransitionParams.duration} onChange={e=>setTextTransitionParams(prev=>({...prev,duration:Number(e.target.value)}))} className="w-full accent-Purple-600"/>
+              <input type="range" min={0.1} max={3} step={0.1} value={textTransitionParams.duration} onChange={e=>setTextTransitionParams(prev=>({...prev,duration:Number(e.target.value)}))} className="w-full accent-purple-600"/>
             </div>
             <div>
-              <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Intensity: {Math.round(textTransitionParams.intensity * 100)}%</label>
-              <input type="range" min={0} max={100} value={Math.round(textTransitionParams.intensity * 100)} onChange={e=>setTextTransitionParams(prev=>({...prev,intensity:Number(e.target.value)/100}))} className="w-full accent-Purple-600"/>
+              <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Intensity: {Math.round(textTransitionParams.intensity*100)}%</label>
+              <input type="range" min={0} max={100} value={Math.round(textTransitionParams.intensity*100)} onChange={e=>setTextTransitionParams(prev=>({...prev,intensity:Number(e.target.value)/100}))} className="w-full accent-purple-600"/>
             </div>
-            <Button onClick={()=>triggerTransition(textTransition, textTransitionParams)} disabled={textTransition==="none"||isTransitioning} className="w-full py-1.5 rounded bg-Purple-900/40 border border-Purple-700/40 text-Purple-300 text-xs font-bold disabled:opacity-50">
+            <button onClick={()=>triggerTransition(textTransition,textTransitionParams)} disabled={textTransition==="none"||isTransitioning} className="w-full py-1.5 rounded bg-purple-900/40 border border-purple-700/40 text-purple-300 text-xs font-bold disabled:opacity-50">
               {isTransitioning?"⏳ Playing...":"▶ Play Transition"}
-            </Button>
+            </button>
           </div>
         </div>
 
@@ -1661,37 +1647,37 @@ export default function TextAnimator() {
         <div className="p-3 border-b border-red-900/20">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold" style={{fontFamily:"Cinzel"}}>Overlays</h2>
-            <Button onClick={()=>setShowOverlayPanel(v=>!v)} className="text-[10px] text-zinc-500 hover:text-zinc-300">{showOverlayPanel?"Hide":"Show"}</Button>
+            <button onClick={()=>setShowOverlayPanel(v=>!v)} className="text-[10px] text-zinc-500 hover:text-zinc-300">{showOverlayPanel?"Hide":"Show"}</button>
           </div>
           {showOverlayPanel && (
             <div className="space-y-2">
               <div className="flex flex-wrap gap-1">
                 {OVERLAY_CATEGORIES.map(cat=>(
-                  <Button Key={Cat} onClick={()=>setOverlayCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] font-medium transition-all border ${overlayCategory===cat?"bg-red-900/30 border-red-700/40 text-red-300":"border-transparent text-zinc-500 hover:text-zinc-300"}`}>{cat}</Button>
+                  <button key={cat} onClick={()=>setOverlayCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] font-medium transition-all border ${overlayCategory===cat?"bg-red-900/30 border-red-700/40 text-red-300":"border-transparent text-zinc-500 hover:text-zinc-300"}`}>{cat}</button>
                 ))}
               </div>
               <div className="grid grid-cols-3 gap-1">
                 {filteredOverlays.map(o=>(
-                  <Button Key={O.id} onClick={()=>addOverlay(O.id)} className="p-1.5 rounded bg-zinc-800/40 border border-zinc-800/30 hover:border-red-700/40 text-xs text-zinc-400 hover:text-zinc-200 transition-all" title={O.label}>
-                    <span className="text-lg">{O.emoji}</span>
-                  </Button>
+                  <button key={o.id} onClick={()=>addOverlay(o.id)} className="p-1.5 rounded bg-zinc-800/40 border border-zinc-800/30 hover:border-red-700/40 text-xs text-zinc-400 hover:text-zinc-200 transition-all" title={o.label}>
+                    <span className="text-lg">{o.emoji}</span>
+                  </button>
                 ))}
               </div>
-              <Button onClick={()=>setShowAddCustom(true)} className="w-full py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">+ Add Custom</Button>
+              <button onClick={()=>setShowAddCustom(true)} className="w-full py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">+ Add Custom</button>
               {showAddCustom && (
                 <div className="space-y-2 p-2 rounded bg-zinc-900/50 border border-zinc-800/30">
                   <input value={newCustomName} onChange={e=>setNewCustomName(e.target.value)} placeholder="Name" className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
                   <input value={newCustomCategory} onChange={e=>setNewCustomCategory(e.target.value)} placeholder="Category" className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
                   <input ref={customUploadRef} type="file" accept="image/*,video/*" onChange={handleCustomUpload} className="hidden"/>
-                  <Button onClick={()=>customUploadRef.current?.click()} className="w-full py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">📁 Upload Image/GIF/Video</Button>
+                  <button onClick={()=>customUploadRef.current?.click()} className="w-full py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">📁 Upload Image/GIF/Video</button>
                   {pendingCustomFile && (
                     <div className="text-xs text-zinc-400">
                       {pendingIsVideo?"🎬 Video":pendingIsGif?"🎞️ GIF":"🖼️ Image"} selected
                     </div>
                   )}
                   <div className="flex gap-1">
-                    <Button onClick={finalizeCustomOverlay} className="flex-1 py-1 rounded bg-red-900/40 border border-red-700/40 text-xs text-red-300 hover:bg-red-900/60">Add</Button>
-                    <Button onClick={()=>{setShowAddCustom(false);setPendingCustomFile(null);setNewCustomName("");}} className="flex-1 py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">Cancel</Button>
+                    <button onClick={finalizeCustomOverlay} className="flex-1 py-1 rounded bg-red-900/40 border border-red-700/40 text-xs text-red-300 hover:bg-red-900/60">Add</button>
+                    <button onClick={()=>{setShowAddCustom(false);setPendingCustomFile(null);setNewCustomName("");}} className="flex-1 py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">Cancel</button>
                   </div>
                 </div>
               )}
@@ -1701,36 +1687,36 @@ export default function TextAnimator() {
 
         {/* Overlay Editor */}
         {editOv && (
-          <div className="p-3 border-b border-Purple-900/20">
-            <h2 className="text-[10px] text-Purple-400 uppercase tracking-widest font-bold mb-2">Overlay Editor</h2>
+          <div className="p-3 border-b border-purple-900/20">
+            <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold mb-2">Overlay Editor</h2>
             <div className="space-y-2">
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Count: {editOv.params.count}</label>
-                <input type="range" min={10} max={300} value={editOv.params.count} onChange={e=>updateOverlayParams(editOv.instanceId,{count:Number(e.target.value)})} className="w-full accent-Purple-600"/>
+                <input type="range" min={10} max={300} value={editOv.params.count} onChange={e=>updateOverlayParams(editOv.instanceId,{count:Number(e.target.value)})} className="w-full accent-purple-600"/>
               </div>
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Scale: {editOv.scale.toFixed(2)}</label>
-                <input type="range" min={0.1} max={3} step={0.05} value={editOv.scale} onChange={e=>setActiveOverlays(prev=>prev.map(o=>O.instanceId===editOv.instanceId?{...O,scale:Number(e.target.value)}:O))} className="w-full accent-Purple-600"/>
+                <input type="range" min={0.1} max={3} step={0.05} value={editOv.scale} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,scale:Number(e.target.value)}:o))} className="w-full accent-purple-600"/>
               </div>
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Opacity: {Math.round(editOv.opacity*100)}%</label>
-                <input type="range" min={0} max={100} value={Math.round(editOv.opacity*100)} onChange={e=>setActiveOverlays(prev=>prev.map(o=>O.instanceId===editOv.instanceId?{...O,opacity:Number(e.target.value)/100}:O))} className="w-full accent-Purple-600"/>
+                <input type="range" min={0} max={100} value={Math.round(editOv.opacity*100)} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,opacity:Number(e.target.value)/100}:o))} className="w-full accent-purple-600"/>
               </div>
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Min: {editOv.params.speedMin}</label>
-                <input type="range" min={0.1} max={10} step={0.1} value={editOv.params.speedMin} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMin:Number(e.target.value)})} className="w-full accent-Purple-600"/>
+                <input type="range" min={0.1} max={10} step={0.1} value={editOv.params.speedMin} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMin:Number(e.target.value)})} className="w-full accent-purple-600"/>
               </div>
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Max: {editOv.params.speedMax}</label>
-                <input type="range" min={0.1} max={20} step={0.1} value={editOv.params.speedMax} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMax:Number(e.target.value)})} className="w-full accent-Purple-600"/>
+                <input type="range" min={0.1} max={20} step={0.1} value={editOv.params.speedMax} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMax:Number(e.target.value)})} className="w-full accent-purple-600"/>
               </div>
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Min: {editOv.params.sizeMin}</label>
-                <input type="range" min={1} max={100} value={editOv.params.sizeMin} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMin:Number(e.target.value)})} className="w-full accent-Purple-600"/>
+                <input type="range" min={1} max={100} value={editOv.params.sizeMin} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMin:Number(e.target.value)})} className="w-full accent-purple-600"/>
               </div>
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Max: {editOv.params.sizeMax}</label>
-                <input type="range" min={1} max={200} value={editOv.params.sizeMax} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMax:Number(e.target.value)})} className="w-full accent-Purple-600"/>
+                <input type="range" min={1} max={200} value={editOv.params.sizeMax} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMax:Number(e.target.value)})} className="w-full accent-purple-600"/>
               </div>
               <div>
                 <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Direction</label>
@@ -1744,7 +1730,7 @@ export default function TextAnimator() {
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <input type="checkbox" checked={editOv.params.rotate} onChange={e=>updateOverlayParams(editOv.instanceId,{rotate:e.target.checked})} className="accent-Purple-600"/>
+                <input type="checkbox" checked={editOv.params.rotate} onChange={e=>updateOverlayParams(editOv.instanceId,{rotate:e.target.checked})} className="accent-purple-600"/>
                 <span className="text-xs text-zinc-400">Rotate</span>
               </div>
             </div>
@@ -1755,13 +1741,13 @@ export default function TextAnimator() {
         <div className="p-3 border-b border-green-900/20">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-[10px] text-green-400 uppercase tracking-widest font-bold" style={{fontFamily:"Cinzel"}}>Audio Library</h2>
-            <Button onClick={()=>setShowAudioPanel(v=>!v)} className="text-[10px] text-zinc-500 hover:text-zinc-300">{showAudioPanel?"Hide":"Show"}</Button>
+            <button onClick={()=>setShowAudioPanel(v=>!v)} className="text-[10px] text-zinc-500 hover:text-zinc-300">{showAudioPanel?"Hide":"Show"}</button>
           </div>
           {showAudioPanel && (
             <div className="space-y-2">
               <input ref={audioUploadRef} type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden"/>
-              <Button onClick={()=>audioUploadRef.current?.click()} className="w-full py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">🎵 Upload Audio</Button>
-              
+              <button onClick={()=>audioUploadRef.current?.click()} className="w-full py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">🎵 Upload Audio</button>
+
               {/* TTS Section */}
               <div className="p-2 rounded bg-zinc-900/50 border border-zinc-800/30">
                 <h3 className="text-[9px] text-zinc-500 uppercase mb-1">Text to Speech</h3>
@@ -1778,26 +1764,26 @@ export default function TextAnimator() {
                 </div>
                 <select value={selectedVoice} onChange={e=>setSelectedVoice(e.target.value)} className="w-full mt-1 px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
                   <option value="default">Default Voice</option>
-                  {availableVoices.map(v=>(<option Key={V.name} value={V.name}>{V.name} ({V.lang})</option>))}
+                  {availableVoices.map(v=>(<option key={v.name} value={v.name}>{v.name} ({v.lang})</option>))}
                 </select>
-                <Button onClick={generateTTS} className="w-full mt-1 py-1 rounded bg-green-900/40 border border-green-700/40 text-xs text-green-300 hover:bg-green-900/60">🔊 Generate TTS</Button>
+                <button onClick={generateTTS} className="w-full mt-1 py-1 rounded bg-green-900/40 border border-green-700/40 text-xs text-green-300 hover:bg-green-900/60">🔊 Generate TTS</button>
               </div>
 
               {/* Audio List */}
               <div className="space-y-1 max-h-32 overflow-y-auto">
                 {audioLibrary.map(audio=>(
-                  <Div Key={Audio.id} className="flex items-center justify-between p-1.5 rounded bg-zinc-800/40 border border-zinc-800/30">
+                  <div key={audio.id} className="flex items-center justify-between p-1.5 rounded bg-zinc-800/40 border border-zinc-800/30">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs">{Audio.type==="horror"?"👻":Audio.type==="nature"?"🌧️":Audio.type==="music"?"🎵":Audio.type==="tts"?"🔊":"📁"}</span>
-                      <span className="text-xs text-zinc-400 truncate">{Audio.name}</span>
+                      <span className="text-xs">{audio.type==="horror"?"👻":audio.type==="nature"?"🌧️":audio.type==="music"?"🎵":audio.type==="tts"?"🔊":"📁"}</span>
+                      <span className="text-xs text-zinc-400 truncate">{audio.name}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button onClick={()=>playingAudio===Audio.id?stopAudio():playAudio(Audio)} className={`text-xs px-1.5 py-0.5 rounded ${playingAudio===Audio.id?"bg-green-900/40 text-green-300":"text-zinc-500 hover:text-zinc-300"}`}>
-                        {playingAudio===Audio.id?"⏹":"▶"}
-                      </Button>
-                      <Button onClick={()=>removeAudio(Audio.id)} className="text-xs text-zinc-600 hover:text-red-400 px-1">×</Button>
+                      <button onClick={()=>playingAudio===audio.id?stopAudio():playAudio(audio)} className={`text-xs px-1.5 py-0.5 rounded ${playingAudio===audio.id?"bg-green-900/40 text-green-300":"text-zinc-500 hover:text-zinc-300"}`}>
+                        {playingAudio===audio.id?"⏹":"▶"}
+                      </button>
+                      <button onClick={()=>removeAudio(audio.id)} className="text-xs text-zinc-600 hover:text-red-400 px-1">×</button>
                     </div>
-                  </Div>
+                  </div>
                 ))}
               </div>
             </div>
