@@ -1,6 +1,6 @@
 // media-transform.ts — Image/Video Transform Tools
 // Place at: artifacts/horror-studio/src/data/media-transform.ts
-
+import { TEXT_TRANSITIONS } from "./transitions";
 export interface MediaTransform {
   x: number; // 0-1 (normalized position)
   y: number; // 0-1
