@@ -1,6 +1,8 @@
 // auto-save.ts — Auto-save and Draft Management
 // Place at: artifacts/horror-studio/src/data/auto-save.ts
+
 import { useState, useEffect, useRef, useCallback } from "react";
+
 const DB_NAME = "HorrorStudioDB";
 const STORE_NAME = "projects";
 const DB_VERSION = 1;
@@ -34,22 +36,22 @@ export async function autoSaveProject(projectData: any, projectId?: string): Pro
     const db = await initDB();
     const transaction = db.transaction([STORE_NAME], "readwrite");
     const store = transaction.objectStore(STORE_NAME);
-    
+
     const id = projectId || `draft-${Date.now()}`;
     const data: AutoSaveData = {
       id,
       name: projectData.name || `Draft ${new Date().toLocaleString()}`,
       data: projectData,
       timestamp: Date.now(),
-      thumbnail: projectData.thumbnail
+      thumbnail: projectData.thumbnail,
     };
-    
+
     await new Promise((resolve, reject) => {
       const request = store.put(data);
       request.onsuccess = () => resolve(undefined);
       request.onerror = () => reject(request.error);
     });
-    
+
     // Keep only last 10 drafts
     const allDrafts = await getAllDrafts();
     if (allDrafts.length > 10) {
@@ -58,16 +60,16 @@ export async function autoSaveProject(projectData: any, projectId?: string): Pro
         await deleteDraft(draft.id);
       }
     }
-    
+
     return id;
   } catch (error) {
     console.error("Auto-save failed:", error);
     // Fallback to localStorage
     const id = projectId || `draft-${Date.now()}`;
-    localStorage.setItem(`horror-draft-${id}`, JSON.stringify({
-      data: projectData,
-      timestamp: Date.now()
-    }));
+    localStorage.setItem(
+      `horror-draft-${id}`,
+      JSON.stringify({ data: projectData, timestamp: Date.now() })
+    );
     return id;
   }
 }
@@ -78,13 +80,13 @@ export async function getAllDrafts(): Promise<AutoSaveData[]> {
     const db = await initDB();
     const transaction = db.transaction([STORE_NAME], "readonly");
     const store = transaction.objectStore(STORE_NAME);
-    
+
     const request = store.getAll();
     const result = await new Promise<AutoSaveData[]>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
-    
+
     return result.sort((a, b) => b.timestamp - a.timestamp);
   } catch (error) {
     // Fallback to localStorage
@@ -97,7 +99,7 @@ export async function getAllDrafts(): Promise<AutoSaveData[]> {
           id: key.replace("horror-draft-", ""),
           name: `Draft ${new Date(data.timestamp).toLocaleString()}`,
           data: data.data,
-          timestamp: data.timestamp
+          timestamp: data.timestamp,
         });
       }
     }
@@ -111,13 +113,13 @@ export async function loadDraft(id: string): Promise<any | null> {
     const db = await initDB();
     const transaction = db.transaction([STORE_NAME], "readonly");
     const store = transaction.objectStore(STORE_NAME);
-    
+
     const request = store.get(id);
     const result = await new Promise<AutoSaveData | undefined>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
-    
+
     return result?.data || null;
   } catch (error) {
     const data = localStorage.getItem(`horror-draft-${id}`);
@@ -131,6 +133,7 @@ export async function deleteDraft(id: string): Promise<void> {
     const db = await initDB();
     const transaction = db.transaction([STORE_NAME], "readwrite");
     const store = transaction.objectStore(STORE_NAME);
+
     await new Promise((resolve, reject) => {
       const request = store.delete(id);
       request.onsuccess = () => resolve(undefined);
@@ -149,8 +152,8 @@ export function useAutoSave(
 ): { lastSaved: Date | null; isSaving: boolean; saveNow: () => Promise<void> } {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout>();
-  
+  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+
   const saveNow = useCallback(async () => {
     setIsSaving(true);
     try {
@@ -163,14 +166,14 @@ export function useAutoSave(
       setIsSaving(false);
     }
   }, [getProjectData, projectId]);
-  
+
   useEffect(() => {
     intervalRef.current = setInterval(saveNow, interval);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [saveNow, interval]);
-  
+
   // Save on page unload
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -180,7 +183,7 @@ export function useAutoSave(
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [getProjectData, projectId]);
-  
+
   return { lastSaved, isSaving, saveNow };
 }
 
@@ -211,3 +214,4 @@ export function importProjectBackup(file: File): Promise<any> {
     reader.readAsText(file);
   });
 }
+
