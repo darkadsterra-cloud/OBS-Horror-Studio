@@ -415,9 +415,9 @@ export default function TextAnimator() {
   };
 
   const clearBg = () => {
-    If(BgVideo)BgVideo.pause();
+    if(bgVideo) bgVideo.pause();
     setBgImage(null);
-    SetBgVideo(Null);
+    SetBgVideo(null);
     SetBgTransform(DEFAULT_MEDIA_TRANSFORM);
     If(BgFileRef.current)BgFileRef.current.Value="";
     If(BgVidRef.current)BgVidRef.current.Value="";
