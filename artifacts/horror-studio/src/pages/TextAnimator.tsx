@@ -291,7 +291,8 @@ export default function TextAnimator() {
   const textTransitionParamsRef = useRef(textTransitionParams); useEffect(()=>{textTransitionParamsRef.current=textTransitionParams;},[textTransitionParams]);
   const mediaTransitionParamsRef = useRef(mediaTransitionParams); useEffect(()=>{mediaTransitionParamsRef.current=mediaTransitionParams;},[mediaTransitionParams]);
 
-  const {data:dbTemplates=[]} = useListTemplates();
+  const {data:dbTemplatesRaw} = useListTemplates();
+  const dbTemplates = Array.isArray(dbTemplatesRaw) ? dbTemplatesRaw : [];
   const allTemplates:TemplateData[] = [
     ...PRESET_TEMPLATES,
     ...dbTemplates.map(t=>({id:t.id,name:t.name,category:t.category,font:t.font,animation:t.animation,colors:t.colors as string[],glow:t.glow,shadowEffect:t.shadowEffect,backgroundStyle:t.backgroundStyle,motionBehavior:t.motionBehavior,isPreset:t.isPreset})),
