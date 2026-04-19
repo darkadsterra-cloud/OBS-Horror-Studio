@@ -1,22 +1,9 @@
 // _app.tsx — Root app with error boundary and recovery
-import { useEffect } from "react";
+// Location: artifacts/horror-studio/src/pages/_app.tsx
+
 import { ErrorBoundary } from "react-error-boundary";
 
 function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
-  useEffect(() => {
-    // Auto-save on error
-    const autoSave = async () => {
-      try {
-        const { autoSaveProject } = await import("@/data/auto-save");
-        const projectData = JSON.parse(localStorage.getItem("last-project-state") || "{}");
-        await autoSaveProject(projectData, "error-recovery");
-      } catch (e) {
-        console.error("Emergency save failed:", e);
-      }
-    };
-    autoSave();
-  }, []);
-
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
       <div className="max-w-md w-full text-center">
