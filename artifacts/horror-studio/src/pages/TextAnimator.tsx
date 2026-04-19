@@ -86,8 +86,8 @@ interface ActiveOverlay {
   posX: number;
   posY: number;
   scale: number;
-  rotation: number;
-  opacity: number;
+  rotation: number;      // NEW: Rotation for overlay
+  opacity: number;       // NEW: Master opacity
 }
 
 // ─── Audio Library Types ──────────────────────────────────────────────────────
@@ -108,15 +108,6 @@ interface ProjectState {
   customOverlays: CustomOverlay[];
   bgColor: string;
   audioLibrary: AudioLibraryItem[];
-}
-
-// ─── getSavedState — MUST be before component ─────────────────────────────────
-function getSavedState() {
-  try {
-    const saved = localStorage.getItem("obs-horror-autosave");
-    if (saved) return JSON.parse(saved);
-  } catch(e) {}
-  return null;
 }
 
 function TemplatePreview({ template, text }:{ template:TemplateData; text:string }) {
@@ -149,6 +140,7 @@ function hitTest(l:TextLayer,cx:number,cy:number,W:number,H:number):boolean {
   return Math.abs(dx*cos-dy*sin)<=hw && Math.abs(dx*sin+dy*cos)<=hh;
 }
 
+// ─── Overlay Hit Test ─────────────────────────────────────────────────────────
 function hitTestOverlay(ov: ActiveOverlay, cx: number, cy: number, W: number, H: number): boolean {
   const ox = ov.posX * W;
   const oy = ov.posY * H;
@@ -158,15 +150,19 @@ function hitTestOverlay(ov: ActiveOverlay, cx: number, cy: number, W: number, H:
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function TextAnimator() {
-  // ── Restore saved state on mount ──────────────────────────────────────────
-  const savedState = getSavedState();
-
+  const getSavedState = () => {
+  try {
+    const saved = localStorage.getItem("obs-horror-autosave");
+    if (saved) return JSON.parse(saved);
+  } catch(e) {}
+  return null;
+};
+const savedState = getSavedState();
   const [selectedTemplate,setSelectedTemplate] = useState<TemplateData>(PRESET_TEMPLATES[0]);
   const [activeCategory,setActiveCategory]     = useState("All");
   const [searchQuery,setSearchQuery]           = useState("");
-  const [canvasPreset,setCanvasPreset]         = useState(savedState?.canvasPreset ?? CANVAS_PRESETS[0]);
+  const [canvasPreset,setCanvasPreset] = useState(savedState?.canvasPreset??CANVAS_PRESETS[0]);
   const [showSizeMenu,setShowSizeMenu]         = useState(false);
-  const [newText,setNewText]                   = useState("");
 
   // BG
   const [bgImage,setBgImage]     = useState<HTMLImageElement|null>(null);
@@ -174,14 +170,10 @@ export default function TextAnimator() {
   const [bgObjectFit,setBgObjectFit] = useState<"cover"|"contain"|"fill">("cover");
   const bgFileRef = useRef<HTMLInputElement>(null);
   const bgVidRef  = useRef<HTMLInputElement>(null);
-
-  // ── Layers ────────────────────────────────────────────────────────────────
-  const [layers,setLayers] = useState<TextLayer[]>(
-    savedState?.layers?.map((l:any)=>({...l,_w:0,_h:0})) ?? [makeLayer()]
-  );
-  const [selectedLayerId,setSelectedLayerId] = useState<string|null>(
-    savedState?.layers?.[0]?.id ?? layers[0]?.id ?? null
-  );
+  
+  // Layers
+  const [layers,setLayers] = useState<TextLayer[]>(savedState?.layers?.map((l:any)=>({...l,_w:0,_h:0}))??[makeLayer()]);
+  const [selectedLayerId,setSelectedLayerId] = useState<string|null>(savedState?.layers?.[0]?.id??layers[0].id);
   const sl = layers.find(l=>l.id===selectedLayerId)??null;
   const updateLayer = useCallback((id:string,patch:Partial<TextLayer>)=>{
     setLayers(prev=>prev.map(l=>l.id===id?{...l,...patch}:l));
@@ -199,16 +191,18 @@ export default function TextAnimator() {
   const [newCustomCategory,setNewCustomCategory]   = useState("Custom");
   const customUploadRef = useRef<HTMLInputElement>(null);
   const overlayParticlesRef = useRef<Record<string,OverlayParticle[]>>({});
+  
+  // NEW: Video upload refs
   const [pendingCustomFile,setPendingCustomFile] = useState<string|null>(null);
   const [pendingIsGif,setPendingIsGif]           = useState(false);
   const [pendingIsVideo,setPendingIsVideo]       = useState(false);
 
   // ── Audio Library ──────────────────────────────────────────────────────────
-  const [audioLibrary, setAudioLibrary] = useState<AudioLibraryItem[]>(savedState?.audioLibrary ?? [
+  const [audioLibrary, setAudioLibrary] = useState<AudioLibraryItem[]>(savedState?.audioLibrary??[
     { id: "1", name: "Horror Ambience", type: "horror", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", duration: 120 },
     { id: "2", name: "Rain Storm",      type: "nature", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", duration: 180 },
     { id: "3", name: "Dark Piano",      type: "music",  url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", duration: 240 },
-  ]);
+]);
   const [showAudioPanel, setShowAudioPanel] = useState(false);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -219,7 +213,6 @@ export default function TextAnimator() {
   const audioUploadRef = useRef<HTMLInputElement>(null);
   const [slActiveSounds, setSlActiveSounds] = useState<string[]>([]);
   const [slMasterVolume, setSlMasterVolume] = useState(0.7);
-
   // ── Recording ──────────────────────────────────────────────────────────────
   const [recording,setRecording]     = useState(false);
   const [recordingTime,setRecordingTime] = useState(0);
@@ -266,6 +259,7 @@ export default function TextAnimator() {
     if(selectedLayerId) updateLayer(selectedLayerId,{color:tpl.colors[0],fontFamily:tpl.font,animation:tpl.animation,glowEnabled:tpl.glow,shadowEnabled:tpl.shadowEffect});
   };
 
+  // BG upload
   const handleBgUpload = (e:React.ChangeEvent<HTMLInputElement>) => {
     const file=e.target.files?.[0]; if(!file) return;
     const reader=new FileReader();
@@ -285,12 +279,13 @@ export default function TextAnimator() {
     if(bgFileRef.current)bgFileRef.current.value="";if(bgVidRef.current)bgVidRef.current.value="";
   };
 
+  // ── Overlay management ─────────────────────────────────────────────────────
   const addOverlay = (defId:string) => {
     const def = OVERLAY_BY_ID[defId]; if(!def) return;
     const instanceId = Math.random().toString(36).slice(2);
     const newOv:ActiveOverlay = {
-      instanceId, defId, label:def.label, emoji:def.emoji,
-      params:{...def.params},
+      instanceId, defId, label:def.label, emoji:def.emoji, 
+      params:{...def.params}, 
       posX:0.5, posY:0.5, scale:1, rotation: 0, opacity: 1
     };
     overlayParticlesRef.current[instanceId] = def.initParticles(presetRef.current.w,presetRef.current.h,def.params);
@@ -298,13 +293,13 @@ export default function TextAnimator() {
     setEditingOverlay(instanceId);
     setSelectedOverlayInstance(instanceId);
   };
-
+  
   const addCustomOverlay = (co:CustomOverlay) => {
     const instanceId = Math.random().toString(36).slice(2);
     const newOv:ActiveOverlay = {
-      instanceId, defId:`custom:${co.id}`, label:co.name, emoji:co.isVideo?"🎬":"🖼️",
+      instanceId, defId:`custom:${co.id}`, label:co.name, emoji:co.isVideo?"🎬":"🖼️", 
       params:{
-        count:co.count, direction:co.direction,
+        count:co.count, direction:co.direction, 
         sizeMin:co.sizeMin, sizeMax:co.sizeMax,
         speedMin:co.speedMin, speedMax:co.speedMax,
         alphaMin:co.alphaMin, alphaMax:co.alphaMax,
@@ -317,14 +312,14 @@ export default function TextAnimator() {
     setEditingOverlay(instanceId);
     setSelectedOverlayInstance(instanceId);
   };
-
+  
   const removeOverlay = (instanceId:string) => {
     delete overlayParticlesRef.current[instanceId];
     setActiveOverlays(prev=>prev.filter(o=>o.instanceId!==instanceId));
     if(editingOverlay===instanceId)setEditingOverlay(null);
     if(selectedOverlayInstance===instanceId)setSelectedOverlayInstance(null);
   };
-
+  
   const updateOverlayParams = (instanceId:string,patch:Partial<OverlayParams>) => {
     setActiveOverlays(prev=>prev.map(o=>{
       if(o.instanceId!==instanceId)return o;
@@ -343,6 +338,7 @@ export default function TextAnimator() {
     }));
   };
 
+  // ── Custom overlay upload (Image/GIF/Video) ────────────────────────────────
   const handleCustomUpload = (e:React.ChangeEvent<HTMLInputElement>) => {
     const file=e.target.files?.[0]; if(!file) return;
     const isGif=file.type==="image/gif";
@@ -355,7 +351,7 @@ export default function TextAnimator() {
     };
     reader.readAsDataURL(file);
   };
-
+  
   const finalizeCustomOverlay = () => {
     if(!pendingCustomFile||!newCustomName.trim())return;
     const co:CustomOverlay = {
@@ -365,17 +361,23 @@ export default function TextAnimator() {
       dataUrl:pendingCustomFile,
       isGif:pendingIsGif,
       isVideo:pendingIsVideo,
-      count:60, direction:"top",
-      sizeMin:20, sizeMax:60,
-      speedMin:1, speedMax:4,
-      alphaMin:0.7, alphaMax:1,
-      rotate:true, opacity: 1
+      count:60,
+      direction:"top",
+      sizeMin:20,
+      sizeMax:60,
+      speedMin:1,
+      speedMax:4,
+      alphaMin:0.7,
+      alphaMax:1,
+      rotate:true,
+      opacity: 1
     };
     setCustomOverlays(prev=>[...prev,co]);
     setPendingCustomFile(null);setNewCustomName("");setShowAddCustom(false);
     addCustomOverlay(co);
   };
 
+  // ── Audio Library Functions ────────────────────────────────────────────────
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -391,7 +393,10 @@ export default function TextAnimator() {
   };
 
   const playAudio = (audio: AudioLibraryItem) => {
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     const a = new Audio(audio.url);
     a.loop = true;
     a.play().catch(() => {});
@@ -400,26 +405,40 @@ export default function TextAnimator() {
   };
 
   const stopAudio = () => {
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     setPlayingAudio(null);
   };
 
   const generateTTS = () => {
     if (!ttsText.trim()) return;
-    if (!('speechSynthesis' in window)) { alert("TTS not supported in this browser"); return; }
+    if (!('speechSynthesis' in window)) {
+      alert("TTS not supported in this browser");
+      return;
+    }
+    
     const utterance = new SpeechSynthesisUtterance(ttsText);
     utterance.rate = ttsRate;
     utterance.pitch = ttsPitch;
+    
     const voices = window.speechSynthesis.getVoices();
     if (voices.length > 0 && selectedVoice !== "default") {
       const voice = voices.find(v => v.name === selectedVoice);
       if (voice) utterance.voice = voice;
     }
+    
+    // Create a blob URL for the TTS (simulated - in real implementation you'd use a server)
+    // For now, we just play it directly and add to library as a "tts" type
     window.speechSynthesis.speak(utterance);
+    
     const newTTS: AudioLibraryItem = {
       id: Math.random().toString(36).slice(2),
       name: `TTS: ${ttsText.slice(0, 30)}...`,
-      type: "tts", url: "#tts", duration: 0
+      type: "tts",
+      url: "#tts", // Placeholder - in production, use actual audio blob
+      duration: 0
     };
     setAudioLibrary(prev => [...prev, newTTS]);
     setTtsText("");
@@ -433,9 +452,9 @@ export default function TextAnimator() {
   // ── Project Save / Load ────────────────────────────────────────────────────
   const saveProject = () => {
     const state:ProjectState = {
-      version:1, canvasPreset,
-      layers:layers.map((l)=>{ const {_w,_h,...rest}=l; return rest; }),
-      activeOverlays, customOverlays, bgColor:"#000000",
+      version:1,canvasPreset,
+      layers:layers.map(({_w,_h,...rest})=>rest),
+      activeOverlays,customOverlays,bgColor:"#000000",
       audioLibrary
     };
     const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
@@ -468,22 +487,20 @@ export default function TextAnimator() {
     };
     reader.readAsText(file);
   };
-
-  // ── Auto-save ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        const state = {
-          version: 1, canvasPreset,
-          layers: layers.map((l) => { const {_w, _h, ...rest} = l; return rest; }),
-          activeOverlays, customOverlays, audioLibrary,
-        };
-        localStorage.setItem("obs-horror-autosave", JSON.stringify(state));
-      } catch (e) { console.warn("Auto-save failed:", e); }
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [layers, canvasPreset, activeOverlays, customOverlays, audioLibrary]);
-
+// Auto-save
+useEffect(() => {
+  const timer = setTimeout(() => {
+    try {
+      const state = {
+        version: 1, canvasPreset,
+         layers: layers.map((l) => { const {_w, _h, ...rest} = l; return rest; }),
+        activeOverlays, customOverlays, audioLibrary,
+      };
+      localStorage.setItem("obs-horror-autosave", JSON.stringify(state));
+    } catch (e) { console.warn("Auto-save failed:", e); }
+  }, 1500);
+  return () => clearTimeout(timer);
+}, [layers, canvasPreset, activeOverlays, customOverlays, audioLibrary]);
   // ─── Render loop ─────────────────────────────────────────────────────────
   useEffect(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
@@ -580,6 +597,7 @@ export default function TextAnimator() {
       if(anim==="blood-drip"){const approxW=fs*l.text.length*0.5;for(let i=0;i<5;i++){const dx=-approxW*0.5+i*(approxW/4);const dy=((t*80+i*37)%(400));ctx.fillStyle=`rgba(180,0,0,${0.6+Math.sin(t+i)*0.3})`;ctx.shadowBlur=0;ctx.beginPath();ctx.ellipse(dx,fs*0.6+dy,3,10+Math.sin(t+i)*5,0,0,Math.PI*2);ctx.fill();}}
       const m=ctx.measureText(l.text);l._w=m.width+Math.max(0,l.letterSpacing)*l.text.length;l._h=fs*1.4;
       ctx.restore();
+      // selection handles
       if(l.id===selectedIdRef.current){
         const hw=l._w/2+10,hh=l._h/2+10;
         ctx.save();ctx.translate(cx,cy);ctx.rotate(l.rotation);
@@ -595,6 +613,7 @@ export default function TextAnimator() {
       const W=presetRef.current.w,H=presetRef.current.h,cv=canvasRef.current;
       if(!cv)return;if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
       drawBg(W,H);
+      // draw all active overlays
       activeOverlaysRef.current.forEach(ov=>{
         if(!overlayParticlesRef.current[ov.instanceId]){
           if(ov.defId.startsWith("custom:")){
@@ -608,10 +627,12 @@ export default function TextAnimator() {
         const ps=overlayParticlesRef.current[ov.instanceId];
         if(!ps)return;
         ctx.save();
+        // Apply overlay transform (position, scale, rotation)
         ctx.translate(ov.posX*W, ov.posY*H);
         ctx.scale(ov.scale, ov.scale);
         ctx.rotate(ov.rotation);
         ctx.globalAlpha = ov.opacity;
+        
         if(ov.defId.startsWith("custom:")){
           const co=customOverlaysRef.current.find(c=>`custom:${c.id}`===ov.defId);
           if(co)drawCustomOverlay(ctx,W,H,t,co,ps);
@@ -619,14 +640,17 @@ export default function TextAnimator() {
           const def=OVERLAY_BY_ID[ov.defId];
           if(def)def.draw(ctx,W,H,t,ps,ov.params);
         }
+        // overlay selection ring
         if(selOvRef.current===ov.instanceId){
           ctx.strokeStyle="rgba(150,100,255,0.8)";ctx.lineWidth=3;ctx.setLineDash([6,4]);
           ctx.strokeRect(-W*0.5,-H*0.5,W,H);ctx.setLineDash([]);
+          // Draw transform handles
           const hw=W*0.5, hh=H*0.5;
           [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].forEach(([hx,hy])=>{
             ctx.fillStyle="#fff";ctx.strokeStyle="#aa66ff";ctx.lineWidth=2;
             ctx.beginPath();ctx.arc(hx,hy,8,0,Math.PI*2);ctx.fill();ctx.stroke();
           });
+          // Rotation handle
           ctx.strokeStyle="rgba(150,100,255,0.6)";ctx.lineWidth=1;ctx.setLineDash([]);
           ctx.beginPath();ctx.moveTo(0,-hh);ctx.lineTo(0,-hh-30);ctx.stroke();
           ctx.fillStyle="#fff";ctx.strokeStyle="#aa66ff";ctx.lineWidth=2;
@@ -641,6 +665,7 @@ export default function TextAnimator() {
     return()=>{running=false;cancelAnimationFrame(animFrameRef.current);};
   },[canvasPreset]);
 
+  // ── Mouse interactions (Text + Overlay) ───────────────────────────────────
   const toCanvas=(e:React.MouseEvent<HTMLCanvasElement>|MouseEvent)=>{
     const cv=canvasRef.current!,rect=cv.getBoundingClientRect();
     return{
@@ -648,11 +673,12 @@ export default function TextAnimator() {
       y:(("clientY" in e?e.clientY:0)-rect.top)*(cv.height/rect.height)
     };
   };
-
+  
   const dragging=useRef(false),dragId=useRef<string|null>(null);
   const dragStartMouse=useRef({x:0,y:0}),dragStartPos=useRef({x:0,y:0});
   const resizing=useRef(false),resizeStartY=useRef(0),resizeStartSize=useRef(0);
   const rotating=useRef(false),rotateStartAngle=useRef(0),rotateStartRot=useRef(0),rotateCenter=useRef({x:0,y:0});
+  // NEW: Overlay drag/resize/rotate
   const ovDragging = useRef(false);
   const ovResizing = useRef(false);
   const ovRotating = useRef(false);
@@ -663,29 +689,42 @@ export default function TextAnimator() {
 
   const handleCanvasMouseDown=(e:React.MouseEvent<HTMLCanvasElement>)=>{
     const {x,y}=toCanvas(e);const W=canvasPreset.w,H=canvasPreset.h;
+    
+    // Check overlay hit first (reverse order = top first)
     const hitOv = [...activeOverlaysRef.current].reverse().find(ov => hitTestOverlay(ov, x, y, W, H));
     if (hitOv) {
       setSelectedOverlayInstance(hitOv.instanceId);
       setSelectedLayerId(null);
       setEditingOverlay(hitOv.instanceId);
+      
+      // Check for rotation handle
       const ox = hitOv.posX * W, oy = hitOv.posY * H;
       const rotHandleY = oy - Math.min(W,H)*hitOv.scale*0.3 - 30;
       if (Math.hypot(x - ox, y - rotHandleY) < 12) {
         ovRotating.current = true;
-        ovRotateStart.current = { angle: Math.atan2(y - oy, x - ox), rotation: hitOv.rotation };
+        ovRotateStart.current = {
+          angle: Math.atan2(y - oy, x - ox),
+          rotation: hitOv.rotation
+        };
         return;
       }
+      
+      // Check for resize handle (bottom-right)
       const size = Math.min(W,H) * hitOv.scale * 0.3;
       if (Math.hypot(x - (ox + size), y - (oy + size)) < 14) {
         ovResizing.current = true;
         ovResizeStart.current = {x, y, scale: hitOv.scale};
         return;
       }
+      
+      // Start drag
       ovDragging.current = true;
       ovDragStart.current = {x, y};
       ovDragStartPos.current = {x: hitOv.posX, y: hitOv.posY};
       return;
     }
+    
+    // Text layer handling
     if(selectedLayerId){
       const sel=layersRef.current.find(l=>l.id===selectedLayerId);
       if(sel){
@@ -701,15 +740,17 @@ export default function TextAnimator() {
     if(hit){setSelectedLayerId(hit.id);setSelectedOverlayInstance(null);dragging.current=true;dragId.current=hit.id;dragStartMouse.current={x,y};dragStartPos.current={x:hit.x,y:hit.y};}
     else{setSelectedLayerId(null);setSelectedOverlayInstance(null);}
   };
-
+  
   useEffect(()=>{
     const onMove=(e:MouseEvent)=>{
       if(!canvasRef.current)return;const{x,y}=toCanvas(e);const W=canvasPreset.w,H=canvasPreset.h;
+      
+      // Overlay transforms
       if(ovDragging.current && selectedOverlayInstance){
         const dx = x - ovDragStart.current.x;
         const dy = y - ovDragStart.current.y;
-        setActiveOverlays(prev => prev.map(o =>
-          o.instanceId === selectedOverlayInstance
+        setActiveOverlays(prev => prev.map(o => 
+          o.instanceId === selectedOverlayInstance 
             ? {...o, posX: Math.max(0, Math.min(1, ovDragStartPos.current.x + dx/W)), posY: Math.max(0, Math.min(1, ovDragStartPos.current.y + dy/H))}
             : o
         ));
@@ -717,7 +758,7 @@ export default function TextAnimator() {
       else if(ovResizing.current && selectedOverlayInstance){
         const dy = y - ovResizeStart.current.y;
         const newScale = Math.max(0.1, Math.min(5, ovResizeStart.current.scale + dy * 0.005));
-        setActiveOverlays(prev => prev.map(o =>
+        setActiveOverlays(prev => prev.map(o => 
           o.instanceId === selectedOverlayInstance ? {...o, scale: newScale} : o
         ));
       }
@@ -725,13 +766,14 @@ export default function TextAnimator() {
         const ov = activeOverlaysRef.current.find(o => o.instanceId === selectedOverlayInstance);
         if(ov){
           const angle = Math.atan2(y - ov.posY*H, x - ov.posX*W);
-          setActiveOverlays(prev => prev.map(o =>
-            o.instanceId === selectedOverlayInstance
+          setActiveOverlays(prev => prev.map(o => 
+            o.instanceId === selectedOverlayInstance 
               ? {...o, rotation: ovRotateStart.current.rotation + (angle - ovRotateStart.current.angle)}
               : o
           ));
         }
       }
+      // Text layer transforms
       else if(dragging.current&&dragId.current){const dx=x-dragStartMouse.current.x,dy=y-dragStartMouse.current.y;updateLayer(dragId.current,{x:Math.max(0,Math.min(1,dragStartPos.current.x+dx/W)),y:Math.max(0,Math.min(1,dragStartPos.current.y+dy/H))});}
       else if(resizing.current&&dragId.current){const dy=y-resizeStartY.current;const ns=Math.max(8,Math.min(600,resizeStartSize.current+dy*0.5));updateLayer(dragId.current,{fontSize:Math.round(ns)});}
       else if(rotating.current&&selectedIdRef.current){const angle=Math.atan2(y-rotateCenter.current.y,x-rotateCenter.current.x);updateLayer(selectedIdRef.current,{rotation:rotateStartRot.current+(angle-rotateStartAngle.current)});}
@@ -744,50 +786,39 @@ export default function TextAnimator() {
     return()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
   },[canvasPreset,updateLayer,selectedOverlayInstance]);
 
+  // Export PNG
   const handleExportPng=()=>{const cv=canvasRef.current;if(!cv)return;const a=document.createElement("a");a.href=cv.toDataURL("image/png");a.download=`horror-overlay-${canvasPreset.w}x${canvasPreset.h}.png`;a.click();};
 
- const startRecording = async () => {
-  const cv = canvasRef.current; if (!cv) return;
-  chunksRef.current = []; setRecordingTime(0);
-
-  try {
-    // Poori tab capture karo — video + audio sab
-    const tabStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { displaySurface: "browser" },
-      // @ts-ignore
-      audio: true,
-      preferCurrentTab: true,
-    });
-
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-      ? "video/webm;codecs=vp9"
-      : "video/webm";
-
-    const mr = new MediaRecorder(tabStream, { mimeType, videoBitsPerSecond: 8_000_000 });
-    mr.ondataavailable = ev => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
-    mr.onstop = () => {
-      tabStream.getTracks().forEach(t => t.stop());
-      const blob = new Blob(chunksRef.current, { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const name = `rec-${Date.now()}.webm`;
-      setRecordings(prev => [{ name, url, size: blob.size }, ...prev]);
-      const a = document.createElement("a"); a.href = url; a.download = name; a.click();
-    };
-
-    mr.start(250);
-    mediaRecorderRef.current = mr;
-    setRecording(true);
-    let el = 0;
-    recTimerRef.current = setInterval(() => {
-      el++; setRecordingTime(el);
-      if (el >= 5 * 60) stopRecording();
-    }, 1000);
-
-  } catch (err) {
-    console.error("Recording failed:", err);
-    alert("Recording permission denied ya browser support nahi karta.");
-  }
-};
+  // Recording with audio
+  const startRecording=()=>{
+    const cv=canvasRef.current;if(!cv)return;chunksRef.current=[];setRecordingTime(0);
+    const videoStream=cv.captureStream(30);let finalStream=videoStream;
+    const vid=bgVideoRef.current;
+    if(vid&&!vid.muted){
+      try{
+        if(!audioCtxRef.current)audioCtxRef.current=new AudioContext();
+        const actx=audioCtxRef.current;
+        if(!audioDestRef.current)audioDestRef.current=actx.createMediaStreamDestination();
+        if(audioSourceRef.current){try{audioSourceRef.current.disconnect();}catch{}}
+        audioSourceRef.current=actx.createMediaElementSource(vid);audioSourceRef.current.connect(audioDestRef.current);audioSourceRef.current.connect(actx.destination);
+        finalStream=new MediaStream([...videoStream.getVideoTracks(),...audioDestRef.current.stream.getAudioTracks()]);
+      }catch(err){console.warn("Audio capture failed:",err);}
+    }
+    // Add playing audio to recording
+    if (audioRef.current && audioDestRef.current) {
+      try {
+        const audioStream = audioRef.current.captureStream ? audioRef.current.captureStream() : null;
+        if (audioStream) {
+          finalStream = new MediaStream([...finalStream.getTracks(), ...audioStream.getAudioTracks()]);
+        }
+      } catch(err) {}
+    }
+    const mimeType=MediaRecorder.isTypeSupported("video/webm;codecs=vp9")?"video/webm;codecs=vp9":MediaRecorder.isTypeSupported("video/webm;codecs=vp8")?"video/webm;codecs=vp8":"video/webm";
+    const mr=new MediaRecorder(finalStream,{mimeType,videoBitsPerSecond:8_000_000});
+    mr.ondataavailable=ev=>{if(ev.data.size>0)chunksRef.current.push(ev.data);};
+    mr.onstop=()=>{const blob=new Blob(chunksRef.current,{type:mimeType});const url=URL.createObjectURL(blob);const name=`rec-${Date.now()}.webm`;setRecordings(prev=>[{name,url,size:blob.size},...prev]);const a=document.createElement("a");a.href=url;a.download=name;a.click();};
+    setTimeout(()=>{mr.start(250);mediaRecorderRef.current=mr;setRecording(true);let el=0;recTimerRef.current=setInterval(()=>{el++;setRecordingTime(el);if(el>=5*60)stopRecording();},1000);},400);
+  };
   const stopRecording=()=>{
     if(recTimerRef.current){clearInterval(recTimerRef.current);recTimerRef.current=null;}
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=="inactive"){mediaRecorderRef.current.requestData?.();setTimeout(()=>{if(mediaRecorderRef.current?.state!=="inactive")mediaRecorderRef.current?.stop();},200);}
@@ -802,6 +833,7 @@ export default function TextAnimator() {
     ...customOverlays.filter(o=>overlayCategory==="All"||overlayCategory==="Custom"||o.category===overlayCategory).map(o=>({id:`custom:${o.id}`,label:o.name,category:o.category,emoji:o.isVideo?"🎬":"🖼️"} as any)),
   ];
 
+  // Get available TTS voices
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   useEffect(() => {
     const loadVoices = () => setAvailableVoices(window.speechSynthesis.getVoices());
@@ -819,6 +851,7 @@ export default function TextAnimator() {
           <button onClick={()=>{const l=makeLayer({text:newText||"TEXT",fontFamily:FONT_OPTIONS[0],color:selectedTemplate.colors[0]});setLayers(p=>[...p,l]);setSelectedLayerId(l.id);}} className="w-full mt-2 py-1.5 rounded bg-red-900/40 border border-red-700/40 text-red-300 text-xs font-bold hover:bg-red-900/60 transition-colors">+ Add Text Layer</button>
           <button onClick={handleSurprise} className="w-full mt-1.5 py-1.5 rounded bg-purple-900/20 border border-purple-700/30 text-purple-300 text-xs font-bold hover:bg-purple-900/40 transition-colors">Surprise Me</button>
         </div>
+        {/* Layers */}
         <div className="p-2 border-b border-red-900/20">
           <h2 className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1.5">Layers</h2>
           <div className="space-y-1 max-h-28 overflow-y-auto">
@@ -829,6 +862,7 @@ export default function TextAnimator() {
               </div>))}
           </div>
         </div>
+        {/* Active Overlays List */}
         {activeOverlays.length > 0 && (
           <div className="p-2 border-b border-red-900/20">
             <h2 className="text-[9px] text-purple-400 uppercase tracking-widest mb-1.5">Active Overlays</h2>
@@ -842,6 +876,7 @@ export default function TextAnimator() {
             </div>
           </div>
         )}
+        {/* Template cats */}
         <div className="p-2 border-b border-red-900/20">
           <div className="flex flex-wrap gap-1">
             {categories.map(cat=>(<button key={cat} onClick={()=>setActiveCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] font-medium transition-all border ${activeCategory===cat?"bg-red-900/30 border-red-700/40 text-red-300":"border-transparent text-zinc-500 hover:text-zinc-300"}`}>{cat}</button>))}
@@ -866,6 +901,7 @@ export default function TextAnimator() {
             <span className="text-zinc-600">Template:</span><span className="text-zinc-300">{selectedTemplate.name}</span>
           </div>
         </div>
+        {/* Canvas size */}
         <div className="relative mb-2">
           <button onClick={()=>setShowSizeMenu(v=>!v)} className="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/40 transition-colors w-full max-w-sm">
             <span className="text-zinc-500 text-[10px]">📐</span><span className="flex-1 text-left truncate">{canvasPreset.label}</span><span className="text-zinc-500 text-[10px] font-mono">{canvasPreset.w}×{canvasPreset.h}</span><span className="text-zinc-600 ml-1">▾</span>
@@ -874,6 +910,7 @@ export default function TextAnimator() {
             {CANVAS_PRESETS.map((p,i)=>(<button key={i} onClick={()=>{setCanvasPreset(p);setShowSizeMenu(false);}} className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between gap-2 ${canvasPreset.label===p.label?"bg-blue-900/40 text-blue-300":"text-zinc-400 hover:bg-zinc-800/60"}`}><span className="truncate">{p.label}</span><span className="text-zinc-600 text-[10px] font-mono">{p.w}×{p.h}</span></button>))}
           </div>)}
         </div>
+        {/* Canvas */}
         <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0">
           <div className="relative rounded border border-purple-900/30 overflow-hidden bg-[#05050a]" style={{aspectRatio:`${canvasPreset.w} / ${canvasPreset.h}`,maxWidth:"100%",maxHeight:"100%",boxShadow:"0 0 30px rgba(100,0,200,0.15)"}}>
             <canvas ref={canvasRef} style={{width:"100%",height:"100%",display:"block",cursor:"crosshair"}} onMouseDown={handleCanvasMouseDown}/>
@@ -881,6 +918,7 @@ export default function TextAnimator() {
             <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/60 border border-zinc-700/30 text-[9px] text-zinc-500 font-mono">{canvasPreset.w}×{canvasPreset.h}</div>
           </div>
         </div>
+        {/* Bottom controls */}
         <div className="flex items-center gap-2 mt-2 flex-wrap flex-shrink-0">
           <button onClick={handleExportPng} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-purple-700/30">📷 Export PNG</button>
           <button onClick={recording?stopRecording:startRecording} className={`px-4 py-1.5 rounded text-xs font-bold border transition-all ${recording?"bg-red-600/30 border-red-500/50 text-red-300 animate-pulse":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-red-700/30"}`}>{recording?`◼ Stop  ${fmt(recordingTime)}`:"● Record"}</button>
@@ -897,62 +935,127 @@ export default function TextAnimator() {
           <button onClick={()=>setShowRecordings(v=>!v)} className="ml-auto px-3 py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">📁 Recordings ({recordings.length})</button>
         </div>
 
+        {/* Recordings */}
         {showRecordings&&(<div className="mt-2 rounded border border-zinc-800/40 bg-[#06060c] max-h-36 overflow-y-auto flex-shrink-0">
           {recordings.length===0?<p className="text-xs text-zinc-600 p-3 text-center">No recordings yet</p>:recordings.map((rec,i)=>(<div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/30"><div className="flex-1 min-w-0"><div className="text-xs text-zinc-300 truncate">{rec.name}</div><div className="text-[9px] text-zinc-600">{(rec.size/1024/1024).toFixed(2)} MB</div></div><a href={rec.url} download={rec.name} className="px-2 py-0.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-400 hover:text-white">↓</a></div>))}
         </div>)}
 
+              {/* ── Audio Library Panel ── */}
         {showAudioPanel&&(
           <div className="mt-2 rounded border border-green-900/40 bg-[#06060c]/95 flex-shrink-0" style={{maxHeight:"480px",overflowY:"auto"}}>
+
+            {/* Header */}
             <div className="px-3 py-2 border-b border-zinc-800/40 flex items-center justify-between sticky top-0 bg-[#06060c] z-10">
               <span className="text-[10px] text-green-400 uppercase tracking-widest font-bold">🔊 Sound Library</span>
               <div className="flex items-center gap-2">
-                {slActiveSounds.length > 0 && (<span className="text-[9px] bg-red-900/40 border border-red-700/30 text-red-400 px-1.5 py-0.5 rounded font-mono animate-pulse">{slActiveSounds.length} LIVE</span>)}
-                {playingAudio && (<button onClick={stopAudio} className="text-[9px] text-red-400 hover:text-red-300 border border-red-700/30 px-1.5 py-0.5 rounded">⏹ Stop Upload</button>)}
+                {slActiveSounds.length > 0 && (
+                  <span className="text-[9px] bg-red-900/40 border border-red-700/30 text-red-400 px-1.5 py-0.5 rounded font-mono animate-pulse">
+                    {slActiveSounds.length} LIVE
+                  </span>
+                )}
+                {playingAudio && (
+                  <button onClick={stopAudio} className="text-[9px] text-red-400 hover:text-red-300 border border-red-700/30 px-1.5 py-0.5 rounded">
+                    ⏹ Stop Upload
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* Built-in SoundLibrary — 130+ horror sounds */}
             <div className="p-2">
-              <SoundLibrary activeSounds={slActiveSounds} onToggleSound={(id) => setSlActiveSounds(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id])} masterVolume={slMasterVolume} onVolumeChange={setSlMasterVolume}/>
+              <SoundLibrary
+                activeSounds={slActiveSounds}
+                onToggleSound={(id) =>
+                  setSlActiveSounds(prev =>
+                    prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+                  )
+                }
+                masterVolume={slMasterVolume}
+                onVolumeChange={setSlMasterVolume}
+              />
             </div>
+
+            {/* Divider */}
             <div className="mx-2 border-t border-zinc-800/50 my-1" />
+
+            {/* Upload + TTS section */}
             <div className="p-2">
               <div className="text-[9px] text-zinc-500 uppercase tracking-widest mb-2">📁 Upload / TTS</div>
+
+              {/* Upload Audio */}
               <div className="flex items-center gap-2 mb-2">
                 <input ref={audioUploadRef} type="file" accept="audio/*" className="hidden" onChange={handleAudioUpload}/>
-                <button onClick={()=>audioUploadRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-dashed border-zinc-600/50 text-xs text-zinc-400 hover:border-green-700/50 hover:text-green-300">📁 Upload Audio</button>
+                <button onClick={()=>audioUploadRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-dashed border-zinc-600/50 text-xs text-zinc-400 hover:border-green-700/50 hover:text-green-300">
+                  📁 Upload Audio
+                </button>
               </div>
+
+              {/* Uploaded audio list */}
               {audioLibrary.length > 0 && (
                 <div className="space-y-1 mb-2 max-h-28 overflow-y-auto">
                   {audioLibrary.map(audio => (
                     <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded bg-zinc-800/30 border border-zinc-700/20">
-                      <span className={`text-xs ${audio.type==='horror'?'text-red-400':audio.type==='nature'?'text-green-400':audio.type==='music'?'text-blue-400':audio.type==='tts'?'text-purple-400':'text-yellow-400'}`}>{audio.type==='horror'?'👻':audio.type==='nature'?'🌿':audio.type==='music'?'🎵':audio.type==='tts'?'🗣️':'📁'}</span>
+                      <span className={`text-xs ${audio.type==='horror'?'text-red-400':audio.type==='nature'?'text-green-400':audio.type==='music'?'text-blue-400':audio.type==='tts'?'text-purple-400':'text-yellow-400'}`}>
+                        {audio.type==='horror'?'👻':audio.type==='nature'?'🌿':audio.type==='music'?'🎵':audio.type==='tts'?'🗣️':'📁'}
+                      </span>
                       <span className="flex-1 text-xs text-zinc-300 truncate">{audio.name}</span>
-                      <button onClick={() => playingAudio === audio.id ? stopAudio() : playAudio(audio)} className={`px-2 py-0.5 rounded text-[10px] border ${playingAudio===audio.id?'bg-green-900/30 border-green-700/40 text-green-300':'bg-zinc-700/30 border-zinc-600/30 text-zinc-400 hover:text-white'}`}>{playingAudio===audio.id?'⏸':'▶'}</button>
+                      <button
+                        onClick={() => playingAudio === audio.id ? stopAudio() : playAudio(audio)}
+                        className={`px-2 py-0.5 rounded text-[10px] border ${playingAudio===audio.id?'bg-green-900/30 border-green-700/40 text-green-300':'bg-zinc-700/30 border-zinc-600/30 text-zinc-400 hover:text-white'}`}
+                      >
+                        {playingAudio===audio.id?'⏸':'▶'}
+                      </button>
                       <button onClick={()=>removeAudio(audio.id)} className="text-zinc-600 hover:text-red-400 text-xs px-1">×</button>
                     </div>
                   ))}
                 </div>
               )}
+
+              {/* TTS */}
               <div className="p-2 rounded border border-zinc-800/50 bg-zinc-900/40">
                 <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1.5">🎤 Text to Speech</div>
-                <textarea value={ttsText} onChange={e=>setTtsText(e.target.value)} placeholder="Enter text to speak..." className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none resize-none mb-1.5" rows={2}/>
+                <textarea
+                  value={ttsText}
+                  onChange={e=>setTtsText(e.target.value)}
+                  placeholder="Enter text to speak..."
+                  className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none resize-none mb-1.5"
+                  rows={2}
+                />
                 <div className="flex gap-2 mb-1.5">
-                  <select value={selectedVoice} onChange={e=>setSelectedVoice(e.target.value)} className="flex-1 px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
+                  <select
+                    value={selectedVoice}
+                    onChange={e=>setSelectedVoice(e.target.value)}
+                    className="flex-1 px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"
+                  >
                     <option value="default">Default Voice</option>
-                    {availableVoices.map((v, i) => (<option key={i} value={v.name}>{v.name} ({v.lang})</option>))}
+                    {availableVoices.map((v, i) => (
+                      <option key={i} value={v.name}>{v.name} ({v.lang})</option>
+                    ))}
                   </select>
                 </div>
                 <div className="flex gap-2 mb-1.5">
-                  <div className="flex-1"><label className="text-[8px] text-zinc-500 uppercase">Rate: {ttsRate}x</label><input type="range" min={0.5} max={2} step={0.1} value={ttsRate} onChange={e=>setTtsRate(Number(e.target.value))} className="w-full accent-green-600"/></div>
-                  <div className="flex-1"><label className="text-[8px] text-zinc-500 uppercase">Pitch: {ttsPitch}</label><input type="range" min={0.5} max={2} step={0.1} value={ttsPitch} onChange={e=>setTtsPitch(Number(e.target.value))} className="w-full accent-green-600"/></div>
+                  <div className="flex-1">
+                    <label className="text-[8px] text-zinc-500 uppercase">Rate: {ttsRate}x</label>
+                    <input type="range" min={0.5} max={2} step={0.1} value={ttsRate} onChange={e=>setTtsRate(Number(e.target.value))} className="w-full accent-green-600"/>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[8px] text-zinc-500 uppercase">Pitch: {ttsPitch}</label>
+                    <input type="range" min={0.5} max={2} step={0.1} value={ttsPitch} onChange={e=>setTtsPitch(Number(e.target.value))} className="w-full accent-green-600"/>
+                  </div>
                 </div>
-                <button onClick={generateTTS} className="w-full py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-zinc-300 text-xs font-bold hover:bg-zinc-800">🎤 Generate TTS</button>
+                <button onClick={generateTTS} className="w-full py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-zinc-300 text-xs font-bold hover:bg-zinc-800">
+                  🎤 Generate TTS
+                </button>
               </div>
             </div>
+
           </div>
         )}
 
+        {/* ── Overlay Panel ── */}
         {showOverlayPanel&&(
           <div className="mt-2 rounded border border-purple-900/40 bg-[#06060c]/95 flex-shrink-0 max-h-96 overflow-y-auto">
+            {/* Active overlays list */}
             {activeOverlays.length>0&&(
               <div className="p-2 border-b border-zinc-800/30">
                 <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1.5">Active Overlays ({activeOverlays.length})</div>
@@ -964,41 +1067,109 @@ export default function TextAnimator() {
                     </div>))}
                 </div>
               </div>)}
+
+            {/* Overlay editor - FIXED: All parameters now work */}
             {editOv&&(
               <div className="p-3 border-b border-zinc-800/30 grid grid-cols-2 gap-x-4 gap-y-2">
                 <div className="col-span-2 text-[10px] text-purple-300 font-bold uppercase tracking-wider">{editOv.emoji} {editOv.label} — Edit</div>
-                <div className="col-span-2"><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Overlay Opacity: <span className="text-zinc-300">{Math.round((editOv.opacity||1)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((editOv.opacity||1)*100)} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,opacity:Number(e.target.value)/100}:o))} className="w-full accent-purple-600"/></div>
-                <div className="col-span-2"><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Scale: <span className="text-zinc-300">{editOv.scale.toFixed(2)}</span></label><input type="range" min={0.1} max={5} step={0.05} value={editOv.scale} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,scale:Number(e.target.value)}:o))} className="w-full accent-purple-600"/></div>
-                <div className="col-span-2"><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Rotation: <span className="text-zinc-300">{Math.round(editOv.rotation*180/Math.PI)}°</span></label><input type="range" min={-180} max={180} value={Math.round(editOv.rotation*180/Math.PI)} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,rotation:Number(e.target.value)*Math.PI/180}:o))} className="w-full accent-purple-600"/></div>
-                <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Count: <span className="text-zinc-300">{editOv.params.count}</span></label><input type="range" min={1} max={500} value={editOv.params.count} onChange={e=>updateOverlayParams(editOv.instanceId,{count:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
-                <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Direction</label><select value={editOv.params.direction} onChange={e=>updateOverlayParams(editOv.instanceId,{direction:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"><option value="top">⬇ From Top</option><option value="bottom">⬆ From Bottom</option><option value="left">➡ From Left</option><option value="right">⬅ From Right</option><option value="random">🔀 Random</option></select></div>
-                <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Min: <span className="text-zinc-300">{editOv.params.sizeMin}</span></label><input type="range" min={1} max={300} value={editOv.params.sizeMin} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMin:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
-                <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Max: <span className="text-zinc-300">{editOv.params.sizeMax}</span></label><input type="range" min={1} max={400} value={editOv.params.sizeMax} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMax:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
-                <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Min: <span className="text-zinc-300">{editOv.params.speedMin}</span></label><input type="range" min={0.1} max={30} step={0.1} value={editOv.params.speedMin} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMin:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
-                <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Max: <span className="text-zinc-300">{editOv.params.speedMax}</span></label><input type="range" min={0.1} max={40} step={0.1} value={editOv.params.speedMax} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMax:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
-                <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Alpha Min: <span className="text-zinc-300">{editOv.params.alphaMin.toFixed(2)}</span></label><input type="range" min={0} max={1} step={0.01} value={editOv.params.alphaMin} onChange={e=>updateOverlayParams(editOv.instanceId,{alphaMin:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
-                <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Alpha Max: <span className="text-zinc-300">{editOv.params.alphaMax.toFixed(2)}</span></label><input type="range" min={0} max={1} step={0.01} value={editOv.params.alphaMax} onChange={e=>updateOverlayParams(editOv.instanceId,{alphaMax:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
-                <div className="flex items-center gap-2 mt-1"><label className="text-[9px] text-zinc-500 uppercase">Rotate</label><button onClick={()=>updateOverlayParams(editOv.instanceId,{rotate:!editOv.params.rotate})} className={`px-3 py-0.5 rounded text-xs border ${editOv.params.rotate?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-500"}`}>{editOv.params.rotate?"On":"Off"}</button></div>
+                
+                {/* Opacity - NEW */}
+                <div className="col-span-2">
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Overlay Opacity: <span className="text-zinc-300">{Math.round((editOv.opacity||1)*100)}%</span></label>
+                  <input type="range" min={0} max={100} value={Math.round((editOv.opacity||1)*100)} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,opacity:Number(e.target.value)/100}:o))} className="w-full accent-purple-600"/>
+                </div>
+                
+                {/* Scale - Fixed */}
+                <div className="col-span-2">
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Scale: <span className="text-zinc-300">{editOv.scale.toFixed(2)}</span></label>
+                  <input type="range" min={0.1} max={5} step={0.05} value={editOv.scale} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,scale:Number(e.target.value)}:o))} className="w-full accent-purple-600"/>
+                </div>
+
+                {/* Rotation - NEW */}
+                <div className="col-span-2">
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Rotation: <span className="text-zinc-300">{Math.round(editOv.rotation*180/Math.PI)}°</span></label>
+                  <input type="range" min={-180} max={180} value={Math.round(editOv.rotation*180/Math.PI)} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,rotation:Number(e.target.value)*Math.PI/180}:o))} className="w-full accent-purple-600"/>
+                </div>
+                
+                {/* Count - Fixed */}
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Count: <span className="text-zinc-300">{editOv.params.count}</span></label>
+                  <input type="range" min={1} max={500} value={editOv.params.count} onChange={e=>updateOverlayParams(editOv.instanceId,{count:Number(e.target.value)})} className="w-full accent-purple-600"/>
+                </div>
+                {/* Direction - Fixed */}
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Direction</label>
+                  <select value={editOv.params.direction} onChange={e=>updateOverlayParams(editOv.instanceId,{direction:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
+                    <option value="top">⬇ From Top</option><option value="bottom">⬆ From Bottom</option><option value="left">➡ From Left</option><option value="right">⬅ From Right</option><option value="random">🔀 Random</option>
+                  </select>
+                </div>
+                {/* Size Min - Fixed */}
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Min: <span className="text-zinc-300">{editOv.params.sizeMin}</span></label>
+                  <input type="range" min={1} max={300} value={editOv.params.sizeMin} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMin:Number(e.target.value)})} className="w-full accent-purple-600"/>
+                </div>
+                {/* Size Max - Fixed */}
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Max: <span className="text-zinc-300">{editOv.params.sizeMax}</span></label>
+                  <input type="range" min={1} max={400} value={editOv.params.sizeMax} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMax:Number(e.target.value)})} className="w-full accent-purple-600"/>
+                </div>
+                {/* Speed Min - Fixed */}
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Min: <span className="text-zinc-300">{editOv.params.speedMin}</span></label>
+                  <input type="range" min={0.1} max={30} step={0.1} value={editOv.params.speedMin} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMin:Number(e.target.value)})} className="w-full accent-purple-600"/>
+                </div>
+                {/* Speed Max - Fixed */}
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Max: <span className="text-zinc-300">{editOv.params.speedMax}</span></label>
+                  <input type="range" min={0.1} max={40} step={0.1} value={editOv.params.speedMax} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMax:Number(e.target.value)})} className="w-full accent-purple-600"/>
+                </div>
+                {/* Alpha Min - Fixed */}
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Alpha Min: <span className="text-zinc-300">{editOv.params.alphaMin.toFixed(2)}</span></label>
+                  <input type="range" min={0} max={1} step={0.01} value={editOv.params.alphaMin} onChange={e=>updateOverlayParams(editOv.instanceId,{alphaMin:Number(e.target.value)})} className="w-full accent-purple-600"/>
+                </div>
+                {/* Alpha Max - Fixed */}
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Alpha Max: <span className="text-zinc-300">{editOv.params.alphaMax.toFixed(2)}</span></label>
+                  <input type="range" min={0} max={1} step={0.01} value={editOv.params.alphaMax} onChange={e=>updateOverlayParams(editOv.instanceId,{alphaMax:Number(e.target.value)})} className="w-full accent-purple-600"/>
+                </div>
+                {/* Rotate toggle */}
+                <div className="flex items-center gap-2 mt-1">
+                  <label className="text-[9px] text-zinc-500 uppercase">Rotate</label>
+                  <button onClick={()=>updateOverlayParams(editOv.instanceId,{rotate:!editOv.params.rotate})} className={`px-3 py-0.5 rounded text-xs border ${editOv.params.rotate?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-500"}`}>{editOv.params.rotate?"On":"Off"}</button>
+                </div>
               </div>)}
+
+            {/* Add overlay section */}
             <div className="p-2">
               <div className="flex items-center gap-2 mb-2">
                 <div className="text-[9px] text-zinc-500 uppercase tracking-wider">Add Overlay</div>
                 <button onClick={()=>setShowAddCustom(v=>!v)} className="px-2 py-0.5 rounded bg-green-900/30 border border-green-700/40 text-green-300 text-[9px] hover:bg-green-900/50">+ Upload Image/GIF/Video</button>
               </div>
+
+              {/* Custom upload form - Now supports Video */}
               {showAddCustom&&(
                 <div className="mb-2 p-2 rounded border border-green-900/40 bg-[#060c06] space-y-2">
                   <div className="text-[9px] text-green-400 uppercase tracking-wider">Add Custom Overlay</div>
                   <input type="text" placeholder="Name (e.g. My Logo)" value={newCustomName} onChange={e=>setNewCustomName(e.target.value)} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
                   <input type="text" placeholder="Category (e.g. Custom)" value={newCustomCategory} onChange={e=>setNewCustomCategory(e.target.value)} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
                   <input ref={customUploadRef} type="file" accept="image/*,image/gif,video/*" className="hidden" onChange={handleCustomUpload}/>
-                  <button onClick={()=>customUploadRef.current?.click()} className="w-full py-1.5 rounded bg-zinc-800/60 border border-dashed border-zinc-600/50 text-xs text-zinc-400 hover:border-green-700/50 hover:text-green-300">{pendingCustomFile?`✅ ${pendingIsVideo?"Video":"Image"} Ready — Click Save`:"🎬 Choose Image, GIF or Video"}</button>
+                  <button onClick={()=>customUploadRef.current?.click()} className="w-full py-1.5 rounded bg-zinc-800/60 border border-dashed border-zinc-600/50 text-xs text-zinc-400 hover:border-green-700/50 hover:text-green-300">
+                    {pendingCustomFile?`✅ ${pendingIsVideo?"Video":"Image"} Ready — Click Save`:"🎬 Choose Image, GIF or Video"}
+                  </button>
                   {pendingCustomFile&&<div className="flex gap-1"><button onClick={finalizeCustomOverlay} className="flex-1 py-1 rounded bg-green-900/40 border border-green-700/40 text-green-300 text-xs font-bold">💾 Save & Add</button><button onClick={()=>{setPendingCustomFile(null);setShowAddCustom(false);}} className="px-3 py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-zinc-400 text-xs">✕</button></div>}
                 </div>)}
+
+              {/* Category filter */}
               <div className="flex gap-1 flex-wrap mb-2">
                 {OVERLAY_CATEGORIES.map(cat=>(<button key={cat} onClick={()=>setOverlayCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] border transition-all ${overlayCategory===cat?"bg-purple-900/40 border-purple-700/40 text-purple-300":"border-zinc-700/30 text-zinc-400 hover:text-zinc-200"}`}>{cat}</button>))}
               </div>
+              {/* Overlay grid */}
               <div className="grid grid-cols-3 gap-1 max-h-36 overflow-y-auto">
-                {filteredOverlays.map((o:any)=>(<button key={o.id} onClick={()=>o.id.startsWith("custom:")?addCustomOverlay(customOverlays.find(c=>`custom:${c.id}`===o.id)!):addOverlay(o.id)} className="px-2 py-1.5 rounded text-[10px] border border-zinc-800/40 text-zinc-400 hover:border-purple-700/40 hover:text-purple-300 hover:bg-purple-900/20 transition-all text-left">{o.emoji} {o.label}</button>))}
+                {filteredOverlays.map((o:any)=>(
+                  <button key={o.id} onClick={()=>o.id.startsWith("custom:")?addCustomOverlay(customOverlays.find(c=>`custom:${c.id}`===o.id)!):addOverlay(o.id)} className="px-2 py-1.5 rounded text-[10px] border border-zinc-800/40 text-zinc-400 hover:border-purple-700/40 hover:text-purple-300 hover:bg-purple-900/20 transition-all text-left">
+                    {o.emoji} {o.label}
+                  </button>))}
               </div>
             </div>
           </div>)}
@@ -1029,18 +1200,28 @@ export default function TextAnimator() {
               <button onClick={()=>{const f=makeLayer({id:sl.id,text:sl.text,x:sl.x,y:sl.y});setLayers(p=>p.map(l=>l.id===sl.id?f:l));}} className="w-full py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-[10px] text-zinc-500 hover:text-zinc-300">↺ Reset Layer</button>
             </div>)}
           {!sl&&<p className="text-[10px] text-zinc-600 text-center py-4">Select a layer to edit</p>}
+          
+          {/* Overlay quick edit if selected */}
           {selectedOverlayInstance && !sl && (
             <div className="space-y-3 pb-3 border-b border-zinc-800/40 mt-3">
               <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold">Overlay Transform</h2>
               {editOv && (
                 <>
-                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Scale: {editOv.scale.toFixed(2)}</label><input type="range" min={0.1} max={5} step={0.05} value={editOv.scale} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,scale:Number(e.target.value)}:o))} className="w-full accent-purple-600"/></div>
-                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Rotation: {Math.round(editOv.rotation*180/Math.PI)}°</label><input type="range" min={-180} max={180} value={Math.round(editOv.rotation*180/Math.PI)} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,rotation:Number(e.target.value)*Math.PI/180}:o))} className="w-full accent-purple-600"/></div>
-                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Opacity: {Math.round((editOv.opacity||1)*100)}%</label><input type="range" min={0} max={100} value={Math.round((editOv.opacity||1)*100)} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,opacity:Number(e.target.value)/100}:o))} className="w-full accent-purple-600"/></div>
+                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Scale: {editOv.scale.toFixed(2)}</label>
+                    <input type="range" min={0.1} max={5} step={0.05} value={editOv.scale} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,scale:Number(e.target.value)}:o))} className="w-full accent-purple-600"/>
+                  </div>
+                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Rotation: {Math.round(editOv.rotation*180/Math.PI)}°</label>
+                    <input type="range" min={-180} max={180} value={Math.round(editOv.rotation*180/Math.PI)} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,rotation:Number(e.target.value)*Math.PI/180}:o))} className="w-full accent-purple-600"/>
+                  </div>
+                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Opacity: {Math.round((editOv.opacity||1)*100)}%</label>
+                    <input type="range" min={0} max={100} value={Math.round((editOv.opacity||1)*100)} onChange={e=>setActiveOverlays(prev=>prev.map(o=>o.instanceId===editOv.instanceId?{...o,opacity:Number(e.target.value)/100}:o))} className="w-full accent-purple-600"/>
+                  </div>
                 </>
               )}
             </div>
           )}
+          
+          {/* Template info */}
           <div className="mt-3">
             <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold mb-2" style={{fontFamily:"Cinzel"}}>Template Info</h2>
             <div className="space-y-1.5 text-xs">
@@ -1059,4 +1240,3 @@ export default function TextAnimator() {
     </div>
   );
 }
-
