@@ -166,7 +166,7 @@ export default function TextAnimator() {
   try {
     const saved = localStorage.getItem("obs-horror-autosave");
     if (saved) return JSON.parse(saved);
-  } catch {}
+  } catch(e) {}
   return null;
 };
 const savedState = getSavedState();
