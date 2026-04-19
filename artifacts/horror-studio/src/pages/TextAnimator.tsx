@@ -150,6 +150,14 @@ function hitTestOverlay(ov: ActiveOverlay, cx: number, cy: number, W: number, H:
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function TextAnimator() {
+  const getSavedState = () => {
+  try {
+    const saved = localStorage.getItem("obs-horror-autosave");
+    if (saved) return JSON.parse(saved);
+  } catch(e) {}
+  return null;
+};
+const savedState = getSavedState();
   const [selectedTemplate,setSelectedTemplate] = useState<TemplateData>(PRESET_TEMPLATES[0]);
   const [activeCategory,setActiveCategory]     = useState("All");
   const [searchQuery,setSearchQuery]           = useState("");
@@ -162,14 +170,7 @@ export default function TextAnimator() {
   const [bgObjectFit,setBgObjectFit] = useState<"cover"|"contain"|"fill">("cover");
   const bgFileRef = useRef<HTMLInputElement>(null);
   const bgVidRef  = useRef<HTMLInputElement>(null);
-  const getSavedState = () => {
-  try {
-    const saved = localStorage.getItem("obs-horror-autosave");
-    if (saved) return JSON.parse(saved);
-  } catch(e) {}
-  return null;
-};
-const savedState = getSavedState();
+  
   // Layers
   const [layers,setLayers] = useState<TextLayer[]>(savedState?.layers?.map((l:any)=>({...l,_w:0,_h:0}))??[makeLayer()]);
   const [selectedLayerId,setSelectedLayerId] = useState<string|null>(savedState?.layers?.[0]?.id??layers[0].id);
