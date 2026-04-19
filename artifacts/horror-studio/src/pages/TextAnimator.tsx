@@ -746,32 +746,79 @@ export default function TextAnimator() {
 
   const handleExportPng=()=>{const cv=canvasRef.current;if(!cv)return;const a=document.createElement("a");a.href=cv.toDataURL("image/png");a.download=`horror-overlay-${canvasPreset.w}x${canvasPreset.h}.png`;a.click();};
 
-  const startRecording=()=>{
-    const cv=canvasRef.current;if(!cv)return;chunksRef.current=[];setRecordingTime(0);
-    const videoStream=cv.captureStream(30);let finalStream=videoStream;
-    const vid=bgVideoRef.current;
-    if(vid&&!vid.muted){
-      try{
-        if(!audioCtxRef.current)audioCtxRef.current=new AudioContext();
-        const actx=audioCtxRef.current;
-        if(!audioDestRef.current)audioDestRef.current=actx.createMediaStreamDestination();
-        if(audioSourceRef.current){try{audioSourceRef.current.disconnect();}catch{}}
-        audioSourceRef.current=actx.createMediaElementSource(vid);audioSourceRef.current.connect(audioDestRef.current);audioSourceRef.current.connect(actx.destination);
-        finalStream=new MediaStream([...videoStream.getVideoTracks(),...audioDestRef.current.stream.getAudioTracks()]);
-      }catch(err){console.warn("Audio capture failed:",err);}
-    }
-    if (audioRef.current && audioDestRef.current) {
-      try {
-        const audioStream = (audioRef.current as any).captureStream ? (audioRef.current as any).captureStream() : null;
-        if (audioStream) { finalStream = new MediaStream([...finalStream.getTracks(), ...audioStream.getAudioTracks()]); }
-      } catch(err) {}
-    }
-    const mimeType=MediaRecorder.isTypeSupported("video/webm;codecs=vp9")?"video/webm;codecs=vp9":MediaRecorder.isTypeSupported("video/webm;codecs=vp8")?"video/webm;codecs=vp8":"video/webm";
-    const mr=new MediaRecorder(finalStream,{mimeType,videoBitsPerSecond:8_000_000});
-    mr.ondataavailable=ev=>{if(ev.data.size>0)chunksRef.current.push(ev.data);};
-    mr.onstop=()=>{const blob=new Blob(chunksRef.current,{type:mimeType});const url=URL.createObjectURL(blob);const name=`rec-${Date.now()}.webm`;setRecordings(prev=>[{name,url,size:blob.size},...prev]);const a=document.createElement("a");a.href=url;a.download=name;a.click();};
-    setTimeout(()=>{mr.start(250);mediaRecorderRef.current=mr;setRecording(true);let el=0;recTimerRef.current=setInterval(()=>{el++;setRecordingTime(el);if(el>=5*60)stopRecording();},1000);},400);
+  const startRecording = () => {
+  const cv = canvasRef.current; if (!cv) return;
+  chunksRef.current = []; setRecordingTime(0);
+  
+  const videoStream = cv.captureStream(30);
+  
+  // AudioContext ek baar banao
+  if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+  const actx = audioCtxRef.current;
+  if (!audioDestRef.current) audioDestRef.current = actx.createMediaStreamDestination();
+  
+  const dest = audioDestRef.current;
+  
+  // ── 1. BG Video Audio ──────────────────────────────────────
+  const vid = bgVideoRef.current;
+  if (vid && !vid.muted) {
+    try {
+      if (audioSourceRef.current) { try { audioSourceRef.current.disconnect(); } catch {} }
+      audioSourceRef.current = actx.createMediaElementSource(vid);
+      audioSourceRef.current.connect(dest);
+      audioSourceRef.current.connect(actx.destination);
+    } catch (err) { console.warn("BG video audio failed:", err); }
+  }
+  
+  // ── 2. Upload Audio (audioRef) ─────────────────────────────
+  if (audioRef.current) {
+    try {
+      const uploadSrc = actx.createMediaElementSource(audioRef.current);
+      uploadSrc.connect(dest);
+      uploadSrc.connect(actx.destination);
+    } catch (err) {}
+  }
+  
+  // ── 3. SoundLibrary ka audio capture ──────────────────────
+  // document ke saare playing audio elements ko capture karo
+  document.querySelectorAll("audio").forEach((el) => {
+    try {
+      const src = actx.createMediaElementSource(el);
+      src.connect(dest);
+      src.connect(actx.destination);
+    } catch {}
+  });
+  
+  // ── Final Stream banao ─────────────────────────────────────
+  const finalStream = new MediaStream([
+    ...videoStream.getVideoTracks(),
+    ...dest.stream.getAudioTracks(),
+  ]);
+  
+  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+    ? "video/webm;codecs=vp9"
+    : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
+    ? "video/webm;codecs=vp8"
+    : "video/webm";
+
+  const mr = new MediaRecorder(finalStream, { mimeType, videoBitsPerSecond: 8_000_000 });
+  mr.ondataavailable = ev => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
+  mr.onstop = () => {
+    const blob = new Blob(chunksRef.current, { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const name = `rec-${Date.now()}.webm`;
+    setRecordings(prev => [{ name, url, size: blob.size }, ...prev]);
+    const a = document.createElement("a"); a.href = url; a.download = name; a.click();
   };
+  
+  setTimeout(() => {
+    mr.start(250); mediaRecorderRef.current = mr; setRecording(true);
+    let el = 0;
+    recTimerRef.current = setInterval(() => {
+      el++; setRecordingTime(el); if (el >= 5 * 60) stopRecording();
+    }, 1000);
+  }, 400);
+};
   const stopRecording=()=>{
     if(recTimerRef.current){clearInterval(recTimerRef.current);recTimerRef.current=null;}
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=="inactive"){mediaRecorderRef.current.requestData?.();setTimeout(()=>{if(mediaRecorderRef.current?.state!=="inactive")mediaRecorderRef.current?.stop();},200);}
