@@ -7,8 +7,8 @@ import { PRESET_TEMPLATES, TEMPLATE_CATEGORIES, type TemplateData } from "@/data
 import {
   OVERLAY_DEFS, OVERLAY_CATEGORIES, OVERLAY_BY_ID,
   tickParticles, drawCustomOverlay, initCustomParticles,
-  type OverlayDef, type OverlayParticle, type OverlayParams, type CustomOverlay, DEFAULT_PARAMS,
-  getVideoElement
+  type OverlayDef, type OverlayParticle, type OverlayParams, type CustomOverlay, DEFAULT_PARAMS
+ 
 } from "@/data/overlays";
 import {
   TEXT_TRANSITIONS,
