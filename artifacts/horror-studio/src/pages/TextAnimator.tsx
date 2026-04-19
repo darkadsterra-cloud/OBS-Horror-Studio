@@ -153,7 +153,7 @@ export default function TextAnimator() {
   const [selectedTemplate,setSelectedTemplate] = useState<TemplateData>(PRESET_TEMPLATES[0]);
   const [activeCategory,setActiveCategory]     = useState("All");
   const [searchQuery,setSearchQuery]           = useState("");
-  const [canvasPreset,setCanvasPreset]         = useState(CANVAS_PRESETS[0]);
+  const [canvasPreset,setCanvasPreset] = useState(savedState?.canvasPreset??CANVAS_PRESETS[0]);
   const [showSizeMenu,setShowSizeMenu]         = useState(false);
 
   // BG
@@ -162,11 +162,17 @@ export default function TextAnimator() {
   const [bgObjectFit,setBgObjectFit] = useState<"cover"|"contain"|"fill">("cover");
   const bgFileRef = useRef<HTMLInputElement>(null);
   const bgVidRef  = useRef<HTMLInputElement>(null);
-
+  const getSavedState = () => {
+  try {
+    const saved = localStorage.getItem("obs-horror-autosave");
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return null;
+};
+const savedState = getSavedState();
   // Layers
-  const [layers,setLayers]                 = useState<TextLayer[]>([makeLayer()]);
-  const [selectedLayerId,setSelectedLayerId] = useState<string|null>(layers[0].id);
-  const [newText,setNewText]               = useState("STARTING SOON");
+  const [layers,setLayers] = useState<TextLayer[]>(savedState?.layers?.map((l:any)=>({...l,_w:0,_h:0}))??[makeLayer()]);
+  const [selectedLayerId,setSelectedLayerId] = useState<string|null>(savedState?.layers?.[0]?.id??layers[0].id);
   const sl = layers.find(l=>l.id===selectedLayerId)??null;
   const updateLayer = useCallback((id:string,patch:Partial<TextLayer>)=>{
     setLayers(prev=>prev.map(l=>l.id===id?{...l,...patch}:l));
@@ -191,11 +197,11 @@ export default function TextAnimator() {
   const [pendingIsVideo,setPendingIsVideo]       = useState(false);
 
   // ── Audio Library ──────────────────────────────────────────────────────────
-  const [audioLibrary, setAudioLibrary] = useState<AudioLibraryItem[]>([
+  const [audioLibrary, setAudioLibrary] = useState<AudioLibraryItem[]>(savedState?.audioLibrary??[
     { id: "1", name: "Horror Ambience", type: "horror", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", duration: 120 },
-    { id: "2", name: "Rain Storm", type: "nature", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", duration: 180 },
-    { id: "3", name: "Dark Piano", type: "music", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", duration: 240 },
-  ]);
+    { id: "2", name: "Rain Storm",      type: "nature", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", duration: 180 },
+    { id: "3", name: "Dark Piano",      type: "music",  url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", duration: 240 },
+]);
   const [showAudioPanel, setShowAudioPanel] = useState(false);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -480,7 +486,20 @@ export default function TextAnimator() {
     };
     reader.readAsText(file);
   };
-
+// Auto-save
+useEffect(() => {
+  const timer = setTimeout(() => {
+    try {
+      const state = {
+        version: 1, canvasPreset,
+        layers: layers.map(({ _w, _h, ...rest }) => rest),
+        activeOverlays, customOverlays, audioLibrary,
+      };
+      localStorage.setItem("obs-horror-autosave", JSON.stringify(state));
+    } catch (e) { console.warn("Auto-save failed:", e); }
+  }, 1500);
+  return () => clearTimeout(timer);
+}, [layers, canvasPreset, activeOverlays, customOverlays, audioLibrary]);
   // ─── Render loop ─────────────────────────────────────────────────────────
   useEffect(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
@@ -909,7 +928,7 @@ export default function TextAnimator() {
           {(bgImage||bgVideo)&&(<><select value={bgObjectFit} onChange={e=>setBgObjectFit(e.target.value as any)} className="px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select><button onClick={clearBg} className="px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-red-400">✕ Clear BG</button></>)}
           <button onClick={()=>setShowOverlayPanel(v=>!v)} className={`px-3 py-1.5 rounded text-xs border transition-colors ${activeOverlays.length>0?"bg-purple-900/30 border-purple-700/40 text-purple-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-purple-700/30"}`}>🎭 Overlays {activeOverlays.length>0?`(${activeOverlays.length})`:""}</button>
           <button onClick={()=>setShowAudioPanel(v=>!v)} className={`px-3 py-1.5 rounded text-xs border transition-colors ${slActiveSounds.length>0||playingAudio?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-green-700/30"}`}>🔊 Audio{slActiveSounds.length>0?` (${slActiveSounds.length} ▶)`:playingAudio?" ▶":""}</button>
-          <button onClick={saveProject} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-green-700/30">💾 Save</button>
+          <button onClick={saveProject} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-green-700/30">>💾 Save <span className="text-[8px] text-green-600 ml-1">●AUTO</span></button>
           <input ref={loadProjectRef} type="file" accept=".json" className="hidden" onChange={loadProject}/>
           <button onClick={()=>loadProjectRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-yellow-700/30">📂 Load</button>
           <button onClick={()=>setShowRecordings(v=>!v)} className="ml-auto px-3 py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">📁 Recordings ({recordings.length})</button>
