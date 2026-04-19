@@ -1,6 +1,6 @@
 // auto-save.ts — Auto-save and Draft Management
 // Place at: artifacts/horror-studio/src/data/auto-save.ts
-
+import { useState, useEffect, useRef, useCallback } from "react";
 const DB_NAME = "HorrorStudioDB";
 const STORE_NAME = "projects";
 const DB_VERSION = 1;
