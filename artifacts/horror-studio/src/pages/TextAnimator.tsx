@@ -425,7 +425,7 @@ export default function TextAnimator() {
 
   // Transition Functions
   const triggerTransition = useCallback((transitionId: string, params: TransitionParams = DEFAULT_TRANSITION) => {
-    If(TransitionId==="None") Return;
+    if(transitionId==="None") return;
     
     setIsTransitioning(true);
     setTransitionProgress(0);
