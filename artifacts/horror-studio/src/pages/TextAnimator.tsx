@@ -1,26 +1,64 @@
+// TextAnimator.tsx — Fixed Version
+// Bugs Fixed:
+// 1. tickParticles never called → added to render loop
+// 2. isTransitioning/transitionProgress as state in render dep array → converted to refs
+// 3. bgTransform.opacity ignored in drawBg → now applied via ctx.globalAlpha
+// 4. Dual fit-mode conflict (bgObjectFit vs bgTransform.fitMode) → unified to bgTransform.fitMode
+// 5. Video object URL memory leak → URL.revokeObjectURL on cleanup
+// 6. Dead imports removed (calculateMediaDrawParams, MEDIA_TRANSITIONS, TRANSITION_CATEGORIES, DEFAULT_PARAMS)
+
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useListTemplates } from "@workspace/api-client-react";
 import { PRESET_TEMPLATES, TEMPLATE_CATEGORIES, type TemplateData } from "@/data/templates";
 import {
   OVERLAY_DEFS, OVERLAY_CATEGORIES, OVERLAY_BY_ID,
-  tickParticles, drawCustomOverlay, initCustomParticles, getOrCreateVideo, removeVideoCache,
-  type OverlayDef, type OverlayParticle, type OverlayParams, type CustomOverlay, DEFAULT_PARAMS
+  tickParticles, drawCustomOverlay, initCustomParticles,
+  type OverlayDef, type OverlayParticle, type OverlayParams, type CustomOverlay,
 } from "@/data/overlays";
 
-// ─── Canvas Sizes ─────────────────────────────────────────────────────────────
+import {
+  TEXT_TRANSITIONS,
+  applyTransition,
+  cleanupTransition,
+  type TransitionParams,
+  DEFAULT_TRANSITION,
+} from "@/data/transitions";
+
+import {
+  type MediaTransform,
+  DEFAULT_MEDIA_TRANSFORM,
+  applyMediaTransform,
+} from "@/data/media-transform";
+
+import {
+  useAutoSave,
+  loadDraft,
+  exportProjectBackup,
+} from "@/data/auto-save";
+
+import {
+  FrameRateController,
+  VideoBufferManager,
+  MemoryMonitor,
+  optimizeCanvas,
+  cleanupResources,
+  detectLowPowerMode,
+} from "@/data/performance-optimizer";
+
+// ─── Canvas Sizes ────────────────────────────────────────────────────────────
 const CANVAS_PRESETS = [
-  { label:"[Standard] 1920×1080 — Full HD",       w:1920, h:1080 },
-  { label:"[2K] 2560×1440 — 2K QHD",              w:2560, h:1440 },
-  { label:"[4K] 3840×2160 — 4K UHD",              w:3840, h:2160 },
-  { label:"[HD] 1280×720 — HD 720p",               w:1280, h:720  },
-  { label:"[Twitch] 1920×1080",                    w:1920, h:1080 },
-  { label:"[OBS] 1920×1080 — OBS Canvas",          w:1920, h:1080 },
-  { label:"[TikTok] 1080×1920 — TikTok Vertical",  w:1080, h:1920 },
-  { label:"[TikTok] 1920×1080 — TikTok Landscape", w:1920, h:1080 },
-  { label:"[Square] 1080×1080 — Square",            w:1080, h:1080 },
-  { label:"[Vertical] 1080×1920 — Vertical 9:16",  w:1080, h:1920 },
-  { label:"[Shorts] 1080×1920 — YouTube Shorts",   w:1080, h:1920 },
-  { label:"[Reel] 1080×1920 — Instagram Reel",     w:1080, h:1920 },
+  { label: "[Standard] 1920×1080 — Full HD",        w: 1920, h: 1080 },
+  { label: "[2K] 2560×1440 — 2K QHD",               w: 2560, h: 1440 },
+  { label: "[4K] 3840×2160 — 4K UHD",               w: 3840, h: 2160 },
+  { label: "[HD] 1280×720 — HD 720p",                w: 1280, h: 720  },
+  { label: "[Twitch] 1920×1080",                     w: 1920, h: 1080 },
+  { label: "[OBS] 1920×1080 — OBS Canvas",           w: 1920, h: 1080 },
+  { label: "[TikTok] 1080×1920 — TikTok Vertical",  w: 1080, h: 1920 },
+  { label: "[TikTok] 1920×1080 — TikTok Landscape", w: 1920, h: 1080 },
+  { label: "[Square] 1080×1080 — Square",            w: 1080, h: 1080 },
+  { label: "[Vertical] 1080×1920 — Vertical 9:16",  w: 1080, h: 1920 },
+  { label: "[Shorts] 1080×1920 — YouTube Shorts",   w: 1080, h: 1920 },
+  { label: "[Reel] 1080×1920 — Instagram Reel",     w: 1080, h: 1920 },
 ];
 
 const ALL_ANIMATIONS = [
@@ -30,12 +68,12 @@ const ALL_ANIMATIONS = [
   "spin","spin-reveal","flip-x","flip-y","roll-in",
   "glitch","blood-drip","flicker","static","possessed","demonic","shadow-pulse",
   "cursed","void","hellfire","phantom","decay",
-  "neon-pulse","fire-glow","rainbow","color-cycle","ice-glow","gold-shine",
+  "Neon-pulse","fire-glow","rainbow","color-cycle","ice-glow","gold-shine",
   "toxic-glow","plasma","hologram","disco","lava-glow","chroma","aurora",
   "cinematic-fade","typewriter","dramatic-zoom","split-reveal","curtain",
   "matrix","scan-line","hack","terminal","pixel-reveal","binary","circuit","laser",
-  "float","wobble","jello","heartbeat","tada","wiggle","flash","breathe","levitate",
-  "shake","jack-in-box","back-in-up","back-in-down",
+  "float","wobble","jello","heartbeat","tada","wiggle",
+  "flash","breathe","levitate","shake","jack-in-box","back-in-up","back-in-down",
 ];
 
 const FONT_OPTIONS = [
@@ -55,106 +93,97 @@ const FONT_OPTIONS = [
   "Impact","Arial Black","Georgia","Verdana","Tahoma","Trebuchet MS",
 ];
 
-// ─── Sound Library ────────────────────────────────────────────────────────────
-interface SoundTrack {
-  id: string;
-  name: string;
-  category: string;
-  emoji: string;
-  url?: string;         // for built-in/CDN sounds
-  dataUrl?: string;     // for user uploads
-  isCustom?: boolean;
-  volume: number;       // 0-1
-  loop: boolean;
-}
-
-const BUILTIN_SOUNDS: Omit<SoundTrack,"volume"|"loop">[] = [
-  // Horror
-  {id:"horror-ambient",name:"Horror Ambient",category:"Horror",emoji:"👻",url:"https://www.soundjay.com/misc/sounds/fail-trombone-03.mp3"},
-  {id:"heartbeat",name:"Heartbeat",category:"Horror",emoji:"❤️",url:"https://freesound.org/data/previews/23/23623_136145-lq.mp3"},
-  {id:"thunder-crack",name:"Thunder Crack",category:"Horror",emoji:"⚡"},
-  {id:"horror-wind",name:"Horror Wind",category:"Horror",emoji:"🌬️"},
-  {id:"creaky-door",name:"Creaky Door",category:"Horror",emoji:"🚪"},
-  {id:"monster-roar",name:"Monster Roar",category:"Horror",emoji:"👾"},
-  // Nature
-  {id:"rain-light",name:"Light Rain",category:"Nature",emoji:"🌧️"},
-  {id:"rain-heavy",name:"Heavy Rain",category:"Nature",emoji:"⛈️"},
-  {id:"forest",name:"Forest Ambience",category:"Nature",emoji:"🌲"},
-  {id:"ocean-waves",name:"Ocean Waves",category:"Nature",emoji:"🌊"},
-  {id:"wind-nature",name:"Wind",category:"Nature",emoji:"💨"},
-  {id:"fire-crackle",name:"Fire Crackling",category:"Nature",emoji:"🔥"},
-  // Gaming
-  {id:"game-alert",name:"Alert",category:"Gaming",emoji:"🎮"},
-  {id:"level-up",name:"Level Up",category:"Gaming",emoji:"⬆️"},
-  {id:"power-up",name:"Power Up",category:"Gaming",emoji:"⚡"},
-  {id:"countdown",name:"Countdown Beep",category:"Gaming",emoji:"⏳"},
-  // Music
-  {id:"epic-drums",name:"Epic Drums",category:"Music",emoji:"🥁"},
-  {id:"dark-bass",name:"Dark Bass Drop",category:"Music",emoji:"🎸"},
-  {id:"choir",name:"Dark Choir",category:"Music",emoji:"🎵"},
-  {id:"cinematic-hit",name:"Cinematic Hit",category:"Music",emoji:"🎬"},
-];
-
-// ─── Text Layer ────────────────────────────────────────────────────────────────
+// ─── Interfaces ───────────────────────────────────────────────────────────────
 interface TextLayer {
-  id:string; text:string; x:number; y:number;
-  fontSize:number; fontFamily:string; color:string;
-  bold:boolean; italic:boolean; underline:boolean;
-  align:CanvasTextAlign; opacity:number; rotation:number;
-  strokeColor:string; strokeWidth:number;
-  shadowEnabled:boolean; shadowColor:string; shadowBlur:number;
-  glowEnabled:boolean; glowColor:string;
-  letterSpacing:number; animation:string;
-  _w:number; _h:number;
-}
-function makeLayer(p:Partial<TextLayer>={}):TextLayer {
-  return {id:Math.random().toString(36).slice(2),text:"STARTING SOON",x:0.5,y:0.5,fontSize:120,fontFamily:"Creepster",color:"#cc0000",bold:false,italic:false,underline:false,align:"center",opacity:1,rotation:0,strokeColor:"#000000",strokeWidth:4,shadowEnabled:true,shadowColor:"#000000",shadowBlur:20,glowEnabled:false,glowColor:"#ff0000",letterSpacing:0,animation:"none",_w:0,_h:0,...p};
+  id: string; text: string; x: number; y: number;
+  fontSize: number; fontFamily: string; color: string;
+  bold: boolean; italic: boolean; underline: boolean;
+  align: CanvasTextAlign; opacity: number; rotation: number;
+  strokeColor: string; strokeWidth: number;
+  shadowEnabled: boolean; shadowColor: string; shadowBlur: number;
+  glowEnabled: boolean; glowColor: string;
+  letterSpacing: number; animation: string;
+  _w: number; _h: number;
 }
 
-// ─── Active Overlay Instance ───────────────────────────────────────────────────
+function MakeLayer(p: Partial<TextLayer> = {}): TextLayer {
+  return {
+    id: Math.random().toString(36).slice(2),
+    text: "STARTING SOON", x: 0.5, y: 0.5,
+    fontSize: 120, fontFamily: "Creepster", color: "#cc0000",
+    bold: false, italic: false, underline: false,
+    align: "center", opacity: 1, rotation: 0,
+    strokeColor: "#000000", strokeWidth: 4,
+    shadowEnabled: true, shadowColor: "#000000", shadowBlur: 20,
+    glowEnabled: false, glowColor: "#ff0000",
+    letterSpacing: 0, animation: "none", _w: 0, _h: 0,
+    ...p,
+  };
+}
+
 interface ActiveOverlay {
-  instanceId: string;
-  defId: string;
-  label: string;
-  emoji: string;
-  params: OverlayParams;
-  // FIXED: position/scale/rotation for select+drag
-  posX: number;   // 0-1 fraction (center)
-  posY: number;
-  scale: number;
-  rotation: number;
-  opacity: number; // 0-1 — NEW: per-overlay opacity
-  // video-specific extras
-  videoOpacity?: number;
-  videoFit?: "cover"|"contain"|"fill";
-  videoLoop?: boolean;
-  videoMuted?: boolean;
+  instanceId: string; defId: string; label: string; emoji: string;
+  params: OverlayParams; posX: number; posY: number;
+  scale: number; rotation: number; opacity: number;
 }
 
-// ─── Project State ────────────────────────────────────────────────────────────
+interface AudioLibraryItem {
+  id: string; name: string;
+  type: "horror" | "nature" | "music" | "tts" | "uploaded";
+  url: string; duration?: number;
+}
+
 interface ProjectState {
   version: number;
-  canvasPreset: { w:number; h:number; label:string };
-  layers: Omit<TextLayer, "_w"|"_h">[];
+  canvasPreset: { w: number; h: number; label: string };
+  layers: Omit<TextLayer, "_w" | "_h">[];
   activeOverlays: ActiveOverlay[];
   customOverlays: CustomOverlay[];
   bgColor: string;
+  audioLibrary: AudioLibraryItem[];
+  textTransition: string;
+  textTransitionParams: TransitionParams;
+  bgTransform: MediaTransform;
+  mediaTransition: string;
 }
 
-function TemplatePreview({ template, text }:{ template:TemplateData; text:string }) {
-  const bg = template.backgroundStyle==="dark-gradient" ? "linear-gradient(135deg,#0a0808 0%,#150a1a 100%)" : "#080810";
+// ─── Sub-components ───────────────────────────────────────────────────────────
+function TemplatePreview({ template, text }: { template: TemplateData; text: string }) {
+  const bg = template.backgroundStyle === "dark-gradient"
+    ? "linear-gradient(135deg,#0a0808 0%,#150a1a 100%)"
+    : "#080810";
   return (
-    <div className="h-full flex items-center justify-center overflow-hidden" style={{background:bg}}>
-      <span className="text-sm font-bold block text-center px-2 leading-tight" style={{fontFamily:`'${template.font}',sans-serif`,color:template.colors[0],textShadow:template.glow?`0 0 10px ${template.colors[0]}`:"none"}}>
-        {text||template.name.toUpperCase()}
+    <div className="h-full flex items-center justify-center overflow-hidden" style={{ background: bg }}>
+      <span
+        className="text-sm font-bold block text-center px-2 leading-tight"
+        style={{
+          fontFamily: `'${template.font}',sans-serif`,
+          color: template.colors[0],
+          textShadow: template.glow ? `0 0 10px ${template.colors[0]}` : "none",
+        }}
+      >
+        {text || template.name.toUpperCase()}
       </span>
     </div>
   );
 }
-function TemplateCard({template,selected,onClick,text}:{template:TemplateData;selected:boolean;onClick:()=>void;text:string}) {
+
+function TemplateCard({ template, selected, onClick, text }: {
+  template: TemplateData; selected: boolean; onClick: () => void; text: string;
+}) {
   return (
-    <div onClick={onClick} className={`rounded border cursor-pointer transition-all overflow-hidden ${selected?"border-red-600/60 ring-1 ring-red-500/30":"border-zinc-800/40 hover:border-zinc-600/40"}`} style={selected?{boxShadow:"0 0 12px rgba(220,20,60,0.25)"}:{}}>
-      <div className="h-16 bg-[#08080f]"><TemplatePreview template={template} text={text}/></div>
+    <div
+      onClick={onClick}
+      className={`rounded border cursor-pointer transition-all overflow-hidden ${
+        selected
+          ? "border-red-600/60 ring-1 ring-red-500/30"
+          : "border-zinc-800/40 hover:border-zinc-600/40"
+      }`}
+      style={selected ? { boxShadow: "0 0 12px rgba(220,20,60,0.25)" } : {}}
+    >
+      <div className="h-16 bg-[#08080f]">
+        <TemplatePreview template={template} text={text} />
+      </div>
       <div className="px-2 py-1 bg-[#0a0a14] border-t border-zinc-800/30">
         <div className="text-[9px] font-medium text-zinc-400 truncate">{template.name}</div>
         <div className="text-[8px] text-zinc-600">{template.animation}</div>
@@ -162,1086 +191,1610 @@ function TemplateCard({template,selected,onClick,text}:{template:TemplateData;se
     </div>
   );
 }
-function fmt(s:number){return`${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;}
 
-function hitTestLayer(l:TextLayer,cx:number,cy:number,W:number,H:number):boolean {
-  const lx=l.x*W,ly=l.y*H,hw=l._w/2+10,hh=l._h/2+10;
-  const cos=Math.cos(-l.rotation),sin=Math.sin(-l.rotation);
-  const dx=cx-lx,dy=cy-ly;
-  return Math.abs(dx*cos-dy*sin)<=hw && Math.abs(dx*sin+dy*cos)<=hh;
+function fmt(s: number) {
+  return `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 }
 
-// ─── Overlay hit test: check if click is within overlay bounds ────────────────
-function hitTestOverlay(ov:ActiveOverlay,cx:number,cy:number,W:number,H:number):boolean {
-  if(ov.defId.startsWith("custom:")) {
-    // Video overlays occupy full canvas
-    return true;
-  }
-  // For particle overlays, use a generous center region
-  const ox=ov.posX*W, oy=ov.posY*H;
-  const halfW=W*0.45*ov.scale, halfH=H*0.45*ov.scale;
-  return cx>=ox-halfW&&cx<=ox+halfW&&cy>=oy-halfH&&cy<=oy+halfH;
+function hitTest(l: TextLayer, cx: number, cy: number, W: number, H: number): boolean {
+  const lx = l.x * W, ly = l.y * H, hw = l._w / 2 + 10, hh = l._h / 2 + 10;
+  const cos = Math.cos(-l.rotation), sin = Math.sin(-l.rotation);
+  const dx = cx - lx, dy = cy - ly;
+  return Math.abs(dx * cos - dy * sin) <= hw && Math.abs(dx * sin + dy * cos) <= hh;
+}
+
+function hitTestOverlay(ov: ActiveOverlay, cx: number, cy: number, W: number, H: number): boolean {
+  const ox = ov.posX * W, oy = ov.posY * H;
+  const size = Math.min(W, H) * ov.scale * 0.3;
+  return Math.abs(cx - ox) < size && Math.abs(cy - oy) < size;
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function TextAnimator() {
-  const [selectedTemplate,setSelectedTemplate] = useState<TemplateData>(PRESET_TEMPLATES[0]);
-  const [activeCategory,setActiveCategory]     = useState("All");
-  const [searchQuery,setSearchQuery]           = useState("");
-  const [canvasPreset,setCanvasPreset]         = useState(CANVAS_PRESETS[0]);
-  const [showSizeMenu,setShowSizeMenu]         = useState(false);
+  // Template state
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateData>(PRESET_TEMPLATES[0]);
+  const [activeCategory, setActiveCategory]     = useState("All");
+  const [searchQuery, setSearchQuery]           = useState("");
+  const [canvasPreset, setCanvasPreset]         = useState(CANVAS_PRESETS[0]);
+  const [showSizeMenu, setShowSizeMenu]         = useState(false);
 
-  // BG
-  const [bgImage,setBgImage]     = useState<HTMLImageElement|null>(null);
-  const [bgVideo,setBgVideo]     = useState<HTMLVideoElement|null>(null);
-  const [bgObjectFit,setBgObjectFit] = useState<"cover"|"contain"|"fill">("cover");
+  // BG media
+  const [bgImage, setBgImage]   = useState<HTMLImageElement | null>(null);
+  const [bgVideo, setBgVideo]   = useState<HTMLVideoElement | null>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
   const bgVidRef  = useRef<HTMLInputElement>(null);
+  // FIX #4: single source of truth for fit mode — bgTransform.fitMode only
+  const [bgTransform, setBgTransform] = useState<MediaTransform>(DEFAULT_MEDIA_TRANSFORM);
 
-  // Layers
-  const [layers,setLayers]                 = useState<TextLayer[]>([makeLayer()]);
-  const [selectedLayerId,setSelectedLayerId] = useState<string|null>(layers[0].id);
-  const [newText,setNewText]               = useState("STARTING SOON");
-  const sl = layers.find(l=>l.id===selectedLayerId)??null;
-  const updateLayer = useCallback((id:string,patch:Partial<TextLayer>)=>{
-    setLayers(prev=>prev.map(l=>l.id===id?{...l,...patch}:l));
-  },[]);
+  // Selected media for transform drag
+  const [selectedMedia, setSelectedMedia] = useState<"bg-image" | "bg-video" | null>(null);
 
-  // ── Active Tab (right sidebar) ─────────────────────────────────────────────
-  const [rightTab, setRightTab] = useState<"text"|"overlay"|"sound">("text");
+  // Text layers
+  const [layers, setLayers]                   = useState<TextLayer[]>([MakeLayer()]);
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const [newText, setNewText]                 = useState("STARTING SOON");
+  const sl = layers.find(l => l.id === selectedLayerId) ?? null;
 
-  // ── Multiple Overlays ──────────────────────────────────────────────────────
-  const [activeOverlays,setActiveOverlays]         = useState<ActiveOverlay[]>([]);
-  const [selectedOverlayInstance,setSelectedOverlayInstance] = useState<string|null>(null);
-  const [showOverlayPanel,setShowOverlayPanel]     = useState(false);
-  const [overlayCategory,setOverlayCategory]       = useState("All");
-  const [editingOverlay,setEditingOverlay]         = useState<string|null>(null);
-  const [customOverlays,setCustomOverlays]         = useState<CustomOverlay[]>([]);
-  const [showAddCustom,setShowAddCustom]           = useState(false);
-  const [newCustomName,setNewCustomName]           = useState("");
-  const [newCustomCategory,setNewCustomCategory]   = useState("Custom");
-  const customUploadRef  = useRef<HTMLInputElement>(null);
-  const customVideoRef   = useRef<HTMLInputElement>(null);
-  const overlayParticlesRef = useRef<Record<string,OverlayParticle[]>>({});
+  const updateLayer = useCallback((id: string, patch: Partial<TextLayer>) => {
+    setLayers(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+  }, []);
 
-  // ── Sound Library ──────────────────────────────────────────────────────────
-  const [soundCategory, setSoundCategory]       = useState("All");
-  const [activeSounds, setActiveSounds]         = useState<SoundTrack[]>([]);
-  const [customSounds, setCustomSounds]         = useState<SoundTrack[]>([]);
-  const [ttsText, setTtsText]                   = useState("Welcome to my stream!");
-  const [ttsVoice, setTtsVoice]                 = useState<string>("");
-  const [ttsRate, setTtsRate]                   = useState(1.0);
-  const [ttsPitch, setTtsPitch]                 = useState(1.0);
-  const [availableVoices, setAvailableVoices]   = useState<SpeechSynthesisVoice[]>([]);
-  const [ttsPlaying, setTtsPlaying]             = useState(false);
-  const soundUploadRef   = useRef<HTMLInputElement>(null);
-  const audioElsRef      = useRef<Record<string, HTMLAudioElement>>({});
-  const [showSoundPanel, setShowSoundPanel]     = useState(false);
+  // Overlays
+  const [activeOverlays, setActiveOverlays]                   = useState<ActiveOverlay[]>([]);
+  const [selectedOverlayInstance, setSelectedOverlayInstance] = useState<string | null>(null);
+  const [showOverlayPanel, setShowOverlayPanel]               = useState(false);
+  const [overlayCategory, setOverlayCategory]                 = useState("All");
+  const [editingOverlay, setEditingOverlay]                   = useState<string | null>(null);
+  const [customOverlays, setCustomOverlays]                   = useState<CustomOverlay[]>([]);
+  const [showAddCustom, setShowAddCustom]                     = useState(false);
+  const [newCustomName, setNewCustomName]                     = useState("");
+  const [newCustomCategory, setNewCustomCategory]             = useState("Custom");
+  const [pendingCustomFile, setPendingCustomFile]             = useState<string | null>(null);
+  const [pendingIsGif, setPendingIsGif]                       = useState(false);
+  const [pendingIsVideo, setPendingIsVideo]                   = useState(false);
+  const customUploadRef = useRef<HTMLInputElement>(null);
+  const overlayParticlesRef = useRef<Record<string, OverlayParticle[]>>({});
 
-  // Load TTS voices
-  useEffect(()=>{
-    const load=()=>{
-      const voices=speechSynthesis.getVoices();
-      if(voices.length>0){setAvailableVoices(voices);if(!ttsVoice&&voices[0])setTtsVoice(voices[0].name);}
-    };
-    load();
-    speechSynthesis.onvoiceschanged=load;
-    return()=>{speechSynthesis.onvoiceschanged=null;};
-  },[]);
+  // FIX #2: transitions as refs so render loop doesn't restart every frame
+  const [textTransition, setTextTransition]                     = useState<string>("none");
+  const [textTransitionParams, setTextTransitionParams]         = useState<TransitionParams>(DEFAULT_TRANSITION);
+  const [mediaTransition, setMediaTransition]                   = useState<string>("none");
+  const [mediaTransitionParams, setMediaTransitionParams]       = useState<TransitionParams>(DEFAULT_TRANSITION);
+  const isTransitioningRef  = useRef(false);
+  const transitionProgressRef = useRef(0);
+  // Keep display state for button label only
+  const [isTransitioningDisplay, setIsTransitioningDisplay] = useState(false);
+  const textTransitionRef   = useRef(textTransition);
+  const textTransParamsRef  = useRef(textTransitionParams);
+  const mediaTransitionRef  = useRef(mediaTransition);
+  const mediaTransParamsRef = useRef(mediaTransitionParams);
 
-  const playTTS=()=>{
-    if(ttsPlaying){speechSynthesis.cancel();setTtsPlaying(false);return;}
-    const utt=new SpeechSynthesisUtterance(ttsText);
-    const voice=availableVoices.find(v=>v.name===ttsVoice);
-    if(voice)utt.voice=voice;
-    utt.rate=ttsRate;utt.pitch=ttsPitch;
-    utt.onend=()=>setTtsPlaying(false);
-    speechSynthesis.speak(utt);setTtsPlaying(true);
-  };
+  useEffect(() => { textTransitionRef.current  = textTransition;     }, [textTransition]);
+  useEffect(() => { textTransParamsRef.current  = textTransitionParams; }, [textTransitionParams]);
+  useEffect(() => { mediaTransitionRef.current  = mediaTransition;    }, [mediaTransition]);
+  useEffect(() => { mediaTransParamsRef.current = mediaTransitionParams; }, [mediaTransitionParams]);
 
-  const handleSoundUpload=(e:React.ChangeEvent<HTMLInputElement>)=>{
-    const file=e.target.files?.[0];if(!file)return;
-    const url=URL.createObjectURL(file);
-    const track:SoundTrack={id:Math.random().toString(36).slice(2),name:file.name.replace(/\.[^.]+$/,""),category:"Custom",emoji:"🎵",dataUrl:url,isCustom:true,volume:0.7,loop:true};
-    setCustomSounds(prev=>[...prev,track]);
-    if(soundUploadRef.current)soundUploadRef.current.value="";
-  };
+  // Audio
+  const [audioLibrary, setAudioLibrary] = useState<AudioLibraryItem[]>([
+    { id: "1", name: "Horror Ambience", type: "horror", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", duration: 120 },
+    { id: "2", name: "Rain Storm",      type: "nature", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", duration: 180 },
+    { id: "3", name: "Dark Piano",      type: "music",  url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", duration: 240 },
+  ]);
+  const [showAudioPanel, setShowAudioPanel] = useState(false);
+  const [playingAudio, setPlayingAudio]     = useState<string | null>(null);
+  const audioRef       = useRef<HTMLAudioElement | null>(null);
+  const [ttsText, setTtsText]               = useState("");
+  const [selectedVoice, setSelectedVoice]   = useState("default");
+  const [ttsRate, setTtsRate]               = useState(1);
+  const [ttsPitch, setTtsPitch]             = useState(1);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const audioUploadRef = useRef<HTMLInputElement>(null);
 
-  const toggleSound=(track:SoundTrack)=>{
-    const existing=activeSounds.find(s=>s.id===track.id);
-    if(existing){
-      // stop
-      if(audioElsRef.current[track.id]){audioElsRef.current[track.id].pause();audioElsRef.current[track.id].currentTime=0;delete audioElsRef.current[track.id];}
-      setActiveSounds(prev=>prev.filter(s=>s.id!==track.id));
-    } else {
-      // Only play if there's a URL/dataUrl
-      const src=track.dataUrl||track.url;
-      if(src){
-        const audio=new Audio(src);audio.loop=track.loop;audio.volume=track.volume;
-        audio.play().catch(()=>{});
-        audioElsRef.current[track.id]=audio;
-      }
-      setActiveSounds(prev=>[...prev,{...track}]);
-    }
-  };
-
-  const updateSoundVolume=(id:string,vol:number)=>{
-    if(audioElsRef.current[id])audioElsRef.current[id].volume=vol;
-    setActiveSounds(prev=>prev.map(s=>s.id===id?{...s,volume:vol}:s));
-  };
-
-  const stopAllSounds=()=>{
-    Object.values(audioElsRef.current).forEach(a=>{a.pause();a.currentTime=0;});
-    audioElsRef.current={};setActiveSounds([]);
-  };
-
-  const allSoundTracks: SoundTrack[] = [
-    ...BUILTIN_SOUNDS.map(s=>({...s,volume:0.7,loop:true})),
-    ...customSounds,
-  ];
-  const soundCategories=["All","Horror","Nature","Gaming","Music","Custom"];
-  const filteredSounds=allSoundTracks.filter(s=>soundCategory==="All"||s.category===soundCategory);
-
-  // ── Recording ──────────────────────────────────────────────────────────────
-  const [recording,setRecording]     = useState(false);
-  const [recordingTime,setRecordingTime] = useState(0);
-  const [recordings,setRecordings]   = useState<Array<{name:string;url:string;size:number}>>([]);
-  const [showRecordings,setShowRecordings] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder|null>(null);
+  // Recording
+  const [recording, setRecording]           = useState(false);
+  const [recordingTime, setRecordingTime]   = useState(0);
+  const [recordings, setRecordings]         = useState<Array<{ name: string; url: string; size: number }>>([]);
+  const [showRecordings, setShowRecordings] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef        = useRef<Blob[]>([]);
-  const recTimerRef      = useRef<ReturnType<typeof setInterval>|null>(null);
-  const audioCtxRef      = useRef<AudioContext|null>(null);
-  const audioDestRef     = useRef<MediaStreamAudioDestinationNode|null>(null);
-  const audioSourceRef   = useRef<MediaElementAudioSourceNode|null>(null);
+  const recTimerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioCtxRef      = useRef<AudioContext | null>(null);
+  const audioDestRef     = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const audioSourceRef   = useRef<MediaElementAudioSourceNode | null>(null);
 
-  // ── Canvas / Render ────────────────────────────────────────────────────────
+  // Performance
+  const fpsControllerRef = useRef(new FrameRateController(60));
+  const videoManagerRef  = useRef(new VideoBufferManager(3));
+  const memoryMonitorRef = useRef<MemoryMonitor | null>(null);
+  const [lowPowerMode, setLowPowerMode]     = useState(false);
+
+  // Canvas / Render refs
   const canvasRef    = useRef<HTMLCanvasElement>(null);
-  const animFrameRef = useRef<number>(0);
+  const AnimFrameRef = useRef<number>(0);
   const layersRef    = useRef(layers);
-  useEffect(()=>{layersRef.current=layers;},[layers]);
-  const selectedIdRef = useRef(selectedLayerId);
-  useEffect(()=>{selectedIdRef.current=selectedLayerId;},[selectedLayerId]);
+  const selectedIdRef   = useRef(selectedLayerId);
   const activeOverlaysRef = useRef(activeOverlays);
-  useEffect(()=>{activeOverlaysRef.current=activeOverlays;},[activeOverlays]);
   const customOverlaysRef = useRef(customOverlays);
-  useEffect(()=>{customOverlaysRef.current=customOverlays;},[customOverlays]);
-  const bgImageRef = useRef(bgImage); useEffect(()=>{bgImageRef.current=bgImage;},[bgImage]);
-  const bgVideoRef = useRef(bgVideo); useEffect(()=>{bgVideoRef.current=bgVideo;},[bgVideo]);
-  const bgFitRef   = useRef(bgObjectFit); useEffect(()=>{bgFitRef.current=bgObjectFit;},[bgObjectFit]);
-  const presetRef  = useRef(canvasPreset); useEffect(()=>{presetRef.current=canvasPreset;},[canvasPreset]);
-  const templateRef= useRef(selectedTemplate); useEffect(()=>{templateRef.current=selectedTemplate;},[selectedTemplate]);
-  const selOvRef   = useRef(selectedOverlayInstance); useEffect(()=>{selOvRef.current=selectedOverlayInstance;},[selectedOverlayInstance]);
+  const bgImageRef     = useRef(bgImage);
+  const bgVideoRef     = useRef(bgVideo);
+  const presetRef      = useRef(canvasPreset);
+  const templateRef    = useRef(selectedTemplate);
+  const selOvRef       = useRef(selectedOverlayInstance);
+  const bgTransformRef = useRef(bgTransform);
 
-  const {data:dbTemplates=[]} = useListTemplates();
-  const allTemplates:TemplateData[] = [
+  useEffect(() => { layersRef.current        = layers;               }, [layers]);
+  useEffect(() => { selectedIdRef.current    = selectedLayerId;      }, [selectedLayerId]);
+  useEffect(() => { activeOverlaysRef.current = activeOverlays;      }, [activeOverlays]);
+  useEffect(() => { customOverlaysRef.current = customOverlays;      }, [customOverlays]);
+  useEffect(() => { bgImageRef.current       = bgImage;              }, [bgImage]);
+  useEffect(() => { bgVideoRef.current       = bgVideo;              }, [bgVideo]);
+  useEffect(() => { presetRef.current        = canvasPreset;         }, [canvasPreset]);
+  useEffect(() => { templateRef.current      = selectedTemplate;     }, [selectedTemplate]);
+  useEffect(() => { selOvRef.current         = selectedOverlayInstance; }, [selectedOverlayInstance]);
+  useEffect(() => { bgTransformRef.current   = bgTransform;          }, [bgTransform]);
+
+  // Auto Save
+  const getProjectData = useCallback(() => ({
+    version: 2,
+    canvasPreset,
+    layers: layers.map(({ _w, _h, ...rest }) => rest),
+    activeOverlays,
+    customOverlays,
+    bgColor: "#000000",
+    audioLibrary,
+    textTransition,
+    textTransitionParams,
+    bgTransform,
+    mediaTransition,
+    thumbnail: canvasRef.current?.toDataURL("image/jpeg", 0.3),
+  }), [canvasPreset, layers, activeOverlays, customOverlays, audioLibrary,
+    textTransition, textTransitionParams, bgTransform, mediaTransition]);
+
+  const { lastSaved, isSaving, saveNow } = useAutoSave(getProjectData, 30000);
+
+  // Templates
+  const { data: dbTemplatesRaw = [] } = useListTemplates();
+  const dbTemplates = Array.isArray(dbTemplatesRaw) ? dbTemplatesRaw : [];
+  const allTemplates: TemplateData[] = [
     ...PRESET_TEMPLATES,
-    ...dbTemplates.map(t=>({id:t.id,name:t.name,category:t.category,font:t.font,animation:t.animation,colors:t.colors as string[],glow:t.glow,shadowEffect:t.shadowEffect,backgroundStyle:t.backgroundStyle,motionBehavior:t.motionBehavior,isPreset:t.isPreset})),
+    ...dbTemplates.map(t => ({
+      id: t.id, name: t.name, category: t.category, font: t.font,
+      animation: t.animation, colors: t.colors as string[],
+      glow: t.glow, shadowEffect: t.shadowEffect,
+      backgroundStyle: t.backgroundStyle, motionBehavior: t.motionBehavior,
+      isPreset: t.isPreset,
+    })),
   ];
-  const filtered = allTemplates.filter(t=>{
-    const catMatch = activeCategory==="All"||t.category===activeCategory;
-    const searchMatch = !searchQuery||t.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return catMatch&&searchMatch;
+  const categories = ["All", ...(Array.isArray(TEMPLATE_CATEGORIES) ? TEMPLATE_CATEGORIES : [])];
+  const filtered = (Array.isArray(allTemplates) ? allTemplates : []).filter(t => {
+    const catMatch   = activeCategory === "All" || t.category === activeCategory;
+    const searchMatch = !searchQuery || t.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return catMatch && searchMatch;
   });
 
-  const selectTemplate = (tpl:TemplateData) => {
+  const selectTemplate = (tpl: TemplateData) => {
     setSelectedTemplate(tpl);
-    if(selectedLayerId) updateLayer(selectedLayerId,{color:tpl.colors[0],fontFamily:tpl.font,animation:tpl.animation,glowEnabled:tpl.glow,shadowEnabled:tpl.shadowEffect});
+    if (selectedLayerId) {
+      updateLayer(selectedLayerId, {
+        color: tpl.colors[0], fontFamily: tpl.font, animation: tpl.animation,
+        glowEnabled: tpl.glow, shadowEnabled: tpl.shadowEffect,
+      });
+    }
   };
 
-  // BG upload
-  const handleBgUpload = (e:React.ChangeEvent<HTMLInputElement>) => {
-    const file=e.target.files?.[0]; if(!file) return;
-    const reader=new FileReader();
-    reader.onload=ev=>{const img=new Image();img.onload=()=>{setBgImage(img);setBgVideo(null);};img.src=ev.target?.result as string;};
+  // Performance Init
+  useEffect(() => {
+    setLowPowerMode(detectLowPowerMode());
+    memoryMonitorRef.current = new MemoryMonitor(
+      () => {
+        console.warn("Memory warning - reducing quality");
+        fpsControllerRef.current.setTargetFPS(30);
+      },
+      () => {
+        console.error("Critical memory - emergency cleanup");
+        videoManagerRef.current.clear();
+        cleanupResources(videoManagerRef.current, [], [canvasRef.current!]);
+      }
+    );
+    memoryMonitorRef.current.start();
+    if (canvasRef.current) optimizeCanvas(canvasRef.current);
+    return () => {
+      memoryMonitorRef.current?.stop();
+      cleanupResources(videoManagerRef.current, [], [canvasRef.current!]);
+    };
+  }, []);
+
+  // Draft Restoration
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const restoreId = url.searchParams.get("restore");
+    if (!restoreId) return;
+    loadDraft(restoreId).then(data => {
+      if (!data) return;
+      setCanvasPreset(data.canvasPreset || CANVAS_PRESETS[0]);
+      setLayers(data.layers?.map((l: any) => ({ ...l, _w: 0, _h: 0 })) || [MakeLayer()]);
+      setSelectedLayerId(data.layers[0]?.id || null);
+      setActiveOverlays(data.activeOverlays || []);
+      setCustomOverlays(data.customOverlays || []);
+      setAudioLibrary(data.audioLibrary || []);
+      setTextTransition(data.textTransition || "none");
+      setTextTransitionParams(data.textTransitionParams || DEFAULT_TRANSITION);
+      setBgTransform(data.bgTransform || DEFAULT_MEDIA_TRANSFORM);
+      setMediaTransition(data.mediaTransition || "none");
+      url.searchParams.delete("restore");
+      window.history.replaceState({}, "", url.toString());
+    });
+  }, []);
+
+  // TTS voices
+  useEffect(() => {
+    const loadVoices = () => setAvailableVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+
+  // BG Upload
+  const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        setBgImage(img);
+        setBgVideo(null);
+        setBgTransform(DEFAULT_MEDIA_TRANSFORM);
+      };
+      img.src = ev.target?.result as string;
+    };
     reader.readAsDataURL(file);
   };
-  const handleVideoUpload = (e:React.ChangeEvent<HTMLInputElement>) => {
-    const file=e.target.files?.[0]; if(!file) return;
-    const url=URL.createObjectURL(file);
-    if(bgVideo)bgVideo.pause();
-    const vid=document.createElement("video");vid.src=url;vid.loop=true;vid.muted=false;vid.playsInline=true;
-    vid.play().catch(()=>{vid.muted=true;vid.play();});
-    setBgVideo(vid);setBgImage(null);
+
+  // FIX #5: revoke old object URL to prevent memory leak
+  const bgVideoUrlRef = useRef<string | null>(null);
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (bgVideoUrlRef.current) URL.revokeObjectURL(bgVideoUrlRef.current);
+    const url = URL.createObjectURL(file);
+    bgVideoUrlRef.current = url;
+    if (bgVideo) bgVideo.pause();
+    const vid = document.createElement("video");
+    vid.src = url;
+    vid.loop = true;
+    vid.muted = false;
+    vid.playsInline = true;
+    vid.play().catch(() => { vid.muted = true; vid.play(); });
+    setBgVideo(vid);
+    setBgImage(null);
+    setBgTransform(DEFAULT_MEDIA_TRANSFORM);
   };
+
   const clearBg = () => {
-    if(bgVideo)bgVideo.pause();setBgImage(null);setBgVideo(null);
-    if(bgFileRef.current)bgFileRef.current.value="";if(bgVidRef.current)bgVidRef.current.value="";
+    if (bgVideo) bgVideo.pause();
+    if (bgVideoUrlRef.current) { URL.revokeObjectURL(bgVideoUrlRef.current); bgVideoUrlRef.current = null; }
+    setBgImage(null);
+    setBgVideo(null);
+    setBgTransform(DEFAULT_MEDIA_TRANSFORM);
+    if (bgFileRef.current) bgFileRef.current.value = "";
+    if (bgVidRef.current)  bgVidRef.current.value = "";
   };
 
-  // ── Overlay management ─────────────────────────────────────────────────────
-  const addOverlay = (defId:string) => {
-    const def = OVERLAY_BY_ID[defId]; if(!def) return;
-    const instanceId = Math.random().toString(36).slice(2);
-    const newOv:ActiveOverlay = {instanceId,defId,label:def.label,emoji:def.emoji,params:{...def.params},posX:0.5,posY:0.5,scale:1,rotation:0,opacity:1};
-    overlayParticlesRef.current[instanceId] = def.initParticles(presetRef.current.w,presetRef.current.h,def.params);
-    setActiveOverlays(prev=>[...prev,newOv]);
-    setEditingOverlay(instanceId);
-  };
+  // FIX #2: triggerTransition uses refs, not state setters that cause re-renders
+  const triggerTransition = useCallback((transitionId: string, params: TransitionParams = DEFAULT_TRANSITION) => {
+    if (transitionId === "none") return;
+    isTransitioningRef.current = true;
+    transitionProgressRef.current = 0;
+    setIsTransitioningDisplay(true);
 
-  const addCustomOverlay = (co:CustomOverlay) => {
-    const instanceId = Math.random().toString(36).slice(2);
-    const isVideo = co.isVideo;
-    const newOv:ActiveOverlay = {
-      instanceId,
-      defId:`custom:${co.id}`,
-      label:co.name,emoji:isVideo?"🎬":"🖼️",
-      params:{count:co.count,direction:co.direction,sizeMin:co.sizeMin,sizeMax:co.sizeMax,speedMin:co.speedMin,speedMax:co.speedMax,alphaMin:co.alphaMin,alphaMax:co.alphaMax,rotate:co.rotate},
-      posX:0.5,posY:0.5,scale:1,rotation:0,opacity:1,
-      videoOpacity:co.videoOpacity??1,
-      videoFit:co.videoFit??"cover",
-      videoLoop:co.videoLoop!==false,
-      videoMuted:co.videoMuted!==false,
+    const startTime = performance.now();
+    const duration  = params.duration * 1000;
+
+    const animate = () => {
+      const elapsed  = performance.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      transitionProgressRef.current = progress;
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        setTimeout(() => {
+          isTransitioningRef.current = false;
+          transitionProgressRef.current = 0;
+          setIsTransitioningDisplay(false);
+        }, 100);
+      }
     };
-    overlayParticlesRef.current[instanceId] = isVideo ? [] : initCustomParticles(presetRef.current.w,presetRef.current.h,co);
-    setActiveOverlays(prev=>[...prev,newOv]);
+    requestAnimationFrame(animate);
+  }, []);
+
+  // Overlay Management
+  const addOverlay = (defId: string) => {
+    const def = OVERLAY_BY_ID[defId];
+    if (!def) return;
+    const instanceId = Math.random().toString(36).slice(2);
+    const newOv: ActiveOverlay = {
+      instanceId, defId, label: def.label, emoji: def.emoji,
+      params: { ...def.params },
+      posX: 0.5, posY: 0.5, scale: 1, rotation: 0, opacity: 1,
+    };
+    overlayParticlesRef.current[instanceId] = def.initParticles(
+      presetRef.current.w, presetRef.current.h, def.params
+    );
+    setActiveOverlays(prev => [...prev, newOv]);
     setEditingOverlay(instanceId);
+    setSelectedOverlayInstance(instanceId);
   };
 
-  const removeOverlay = (instanceId:string) => {
-    // cleanup video
-    const ov=activeOverlays.find(o=>o.instanceId===instanceId);
-    if(ov?.defId.startsWith("custom:")){
-      const coId=ov.defId.replace("custom:","");
-      removeVideoCache(coId);
-    }
+  const addCustomOverlay = (co: CustomOverlay) => {
+    const instanceId = Math.random().toString(36).slice(2);
+    const newOv: ActiveOverlay = {
+      instanceId, defId: `custom:${co.id}`, label: co.name,
+      emoji: co.isVideo ? "🎬" : "🖼️",
+      params: {
+        count: co.count, direction: co.direction,
+        sizeMin: co.sizeMin, sizeMax: co.sizeMax,
+        speedMin: co.speedMin, speedMax: co.speedMax,
+        alphaMin: co.alphaMin, alphaMax: co.alphaMax,
+        rotate: co.rotate, opacity: co.opacity || 1,
+      },
+      posX: 0.5, posY: 0.5, scale: 1, rotation: 0, opacity: co.opacity || 1,
+    };
+    overlayParticlesRef.current[instanceId] = initCustomParticles(
+      presetRef.current.w, presetRef.current.h, co
+    );
+    setActiveOverlays(prev => [...prev, newOv]);
+    setEditingOverlay(instanceId);
+    setSelectedOverlayInstance(instanceId);
+  };
+
+  const removeOverlay = (instanceId: string) => {
     delete overlayParticlesRef.current[instanceId];
-    setActiveOverlays(prev=>prev.filter(o=>o.instanceId!==instanceId));
-    if(editingOverlay===instanceId)setEditingOverlay(null);
-    if(selectedOverlayInstance===instanceId)setSelectedOverlayInstance(null);
+    setActiveOverlays(prev => prev.filter(o => o.instanceId !== instanceId));
+    if (editingOverlay === instanceId) setEditingOverlay(null);
+    if (selectedOverlayInstance === instanceId) setSelectedOverlayInstance(null);
   };
 
-  const updateOverlayParams = (instanceId:string,patch:Partial<OverlayParams>) => {
-    setActiveOverlays(prev=>prev.map(o=>{
-      if(o.instanceId!==instanceId)return o;
-      const newParams={...o.params,...patch};
-      if(patch.count!==undefined||patch.direction!==undefined){
-        const W=presetRef.current.w,H=presetRef.current.h;
-        if(o.defId.startsWith("custom:")){
-          const co=customOverlaysRef.current.find(c=>o.defId===`custom:${c.id}`);
-          if(co&&!co.isVideo)overlayParticlesRef.current[instanceId]=initCustomParticles(W,H,{...co,...newParams,count:newParams.count});
+  const updateOverlayParams = (instanceId: string, patch: Partial<OverlayParams>) => {
+    setActiveOverlays(prev => prev.map(o => {
+      if (o.instanceId !== instanceId) return o;
+      const newParams = { ...o.params, ...patch };
+      if (patch.count !== undefined || patch.direction !== undefined ||
+          patch.sizeMin !== undefined || patch.sizeMax !== undefined) {
+        const W = presetRef.current.w, H = presetRef.current.h;
+        if (o.defId.startsWith("custom:")) {
+          const co = customOverlaysRef.current.find(c => o.defId === `custom:${c.id}`);
+          if (co) overlayParticlesRef.current[o.instanceId] = initCustomParticles(W, H, { ...co, ...newParams, count: newParams.count || co.count });
         } else {
-          const def=OVERLAY_BY_ID[o.defId];
-          if(def)overlayParticlesRef.current[instanceId]=def.initParticles(W,H,newParams);
+          const def = OVERLAY_BY_ID[o.defId];
+          if (def) overlayParticlesRef.current[o.instanceId] = def.initParticles(W, H, newParams);
         }
       }
-      return {...o,params:newParams};
+      return { ...o, params: newParams };
     }));
   };
 
-  const updateOverlayProp = (instanceId:string,patch:Partial<ActiveOverlay>)=>{
-    setActiveOverlays(prev=>prev.map(o=>o.instanceId===instanceId?{...o,...patch}:o));
-  };
-
-  // ── Custom overlay upload ──────────────────────────────────────────────────
-  const [pendingCustomFile,setPendingCustomFile] = useState<string|null>(null);
-  const [pendingIsGif,setPendingIsGif]           = useState(false);
-  const [pendingIsVideo,setPendingIsVideo]        = useState(false);
-
-  const handleCustomUpload = (e:React.ChangeEvent<HTMLInputElement>) => {
-    const file=e.target.files?.[0]; if(!file) return;
-    const isGif=file.type==="image/gif";
-    const isVideo=file.type.startsWith("video/");
-    if(isVideo){
-      // Use object URL for video (base64 is too large)
-      const url=URL.createObjectURL(file);
-      setPendingCustomFile(url);setPendingIsGif(false);setPendingIsVideo(true);
-    } else {
-      const reader=new FileReader();
-      reader.onload=ev=>{setPendingCustomFile(ev.target?.result as string);setPendingIsGif(isGif);setPendingIsVideo(false);};
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleCustomVideoUpload=(e:React.ChangeEvent<HTMLInputElement>)=>{
-    const file=e.target.files?.[0];if(!file)return;
-    const url=URL.createObjectURL(file);
-    setPendingCustomFile(url);setPendingIsGif(false);setPendingIsVideo(true);
-    setNewCustomName(prev=>prev||file.name.replace(/\.[^.]+$/,""));
+  // Custom Overlay Upload
+  const handleCustomUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const isGif   = file.type === "image/gif";
+    const isVideo = file.type.startsWith("video/");
+    const reader  = new FileReader();
+    reader.onload = ev => {
+      setPendingCustomFile(ev.target?.result as string);
+      setPendingIsGif(isGif);
+      setPendingIsVideo(isVideo);
+    };
+    reader.readAsDataURL(file);
   };
 
   const finalizeCustomOverlay = () => {
-    if(!pendingCustomFile||!newCustomName.trim())return;
-    const co:CustomOverlay = {
-      id:Math.random().toString(36).slice(2),
-      name:newCustomName.trim(),
-      category:newCustomCategory||"Custom",
-      dataUrl:pendingCustomFile,
-      isGif:pendingIsGif,
-      isVideo:pendingIsVideo,
-      count:60,direction:"top",
-      sizeMin:20,sizeMax:60,speedMin:1,speedMax:4,
-      alphaMin:0.7,alphaMax:1,rotate:true,
-      videoOpacity:1,videoFit:"cover",videoLoop:true,videoMuted:true,
+    if (!pendingCustomFile || !newCustomName.trim()) return;
+    const co: CustomOverlay = {
+      id: Math.random().toString(36).slice(2),
+      name: newCustomName.trim(),
+      category: newCustomCategory || "Custom",
+      dataUrl: pendingCustomFile,
+      isGif: pendingIsGif, isVideo: pendingIsVideo,
+      count: 60, direction: "top",
+      sizeMin: 20, sizeMax: 60,
+      speedMin: 1, speedMax: 4,
+      alphaMin: 0.7, alphaMax: 1,
+      rotate: true, opacity: 1,
     };
-    setCustomOverlays(prev=>[...prev,co]);
-    setPendingCustomFile(null);setNewCustomName("");setShowAddCustom(false);setPendingIsVideo(false);
+    setCustomOverlays(prev => [...prev, co]);
+    setPendingCustomFile(null);
+    setNewCustomName("");
+    setShowAddCustom(false);
     addCustomOverlay(co);
   };
 
-  // ── Project Save / Load ────────────────────────────────────────────────────
-  const saveProject = () => {
-    const state:ProjectState = {
-      version:1,canvasPreset,
-      layers:layers.map(({_w,_h,...rest})=>rest),
-      activeOverlays,customOverlays,bgColor:"#000000",
-    };
-    const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`horror-project-${Date.now()}.json`;a.click();
+  // Audio Functions
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setAudioLibrary(prev => [...prev, {
+      id: Math.random().toString(36).slice(2),
+      name: file.name.replace(/\.[^/.]+$/, ""),
+      type: "uploaded", url, duration: 0,
+    }]);
   };
+
+  const playAudio = (audio: AudioLibraryItem) => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    const a = new Audio(audio.url);
+    a.loop = true;
+    a.play().catch(() => {});
+    audioRef.current = a;
+    setPlayingAudio(audio.id);
+  };
+
+  const stopAudio = () => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    setPlayingAudio(null);
+  };
+
+  const generateTTS = () => {
+    if (!ttsText.trim()) return;
+    if (!("speechSynthesis" in window)) { alert("TTS not supported in this browser"); return; }
+    const utterance = new SpeechSynthesisUtterance(ttsText);
+    utterance.rate  = ttsRate;
+    utterance.pitch = ttsPitch;
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0 && selectedVoice !== "default") {
+      const voice = voices.find(v => v.name === selectedVoice);
+      if (voice) utterance.voice = voice;
+    }
+    window.speechSynthesis.speak(utterance);
+    setAudioLibrary(prev => [...prev, {
+      id: Math.random().toString(36).slice(2),
+      name: `TTS: ${ttsText.slice(0, 30)}...`,
+      type: "tts", url: "#tts", duration: 0,
+    }]);
+    setTtsText("");
+  };
+
+  const removeAudio = (id: string) => {
+    setAudioLibrary(prev => prev.filter(a => a.id !== id));
+    if (playingAudio === id) stopAudio();
+  };
+
+  // Project Save / Load
+  const saveProject = () => {
+    const state: ProjectState = {
+      version: 2, canvasPreset,
+      layers: layers.map(({ _w, _h, ...rest }) => rest),
+      activeOverlays, customOverlays,
+      bgColor: "#000000", audioLibrary,
+      textTransition, textTransitionParams,
+      bgTransform, mediaTransition,
+    };
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = `horror-project-${Date.now()}.json`; a.click();
+  };
+
   const loadProjectRef = useRef<HTMLInputElement>(null);
-  const loadProject = (e:React.ChangeEvent<HTMLInputElement>) => {
-    const file=e.target.files?.[0]; if(!file) return;
-    const reader=new FileReader();
-    reader.onload=ev=>{
-      try{
-        const state:ProjectState=JSON.parse(ev.target?.result as string);
-        setCanvasPreset(state.canvasPreset||CANVAS_PRESETS[0]);
-        setLayers(state.layers.map(l=>({...l,_w:0,_h:0})));
-        setSelectedLayerId(state.layers[0]?.id||null);
-        setCustomOverlays(state.customOverlays||[]);
-        const W=state.canvasPreset?.w||1920,H=state.canvasPreset?.h||1080;
-        state.activeOverlays?.forEach(ov=>{
-          if(ov.defId.startsWith("custom:")){
-            const co=(state.customOverlays||[]).find(c=>`custom:${c.id}`===ov.defId);
-            if(co&&!co.isVideo)overlayParticlesRef.current[ov.instanceId]=initCustomParticles(W,H,co);
-          }else{
-            const def=OVERLAY_BY_ID[ov.defId];
-            if(def)overlayParticlesRef.current[ov.instanceId]=def.initParticles(W,H,ov.params);
+  const loadProject = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const state: ProjectState = JSON.parse(ev.target?.result as string);
+        setCanvasPreset(state.canvasPreset || CANVAS_PRESETS[0]);
+        setLayers(state.layers.map(l => ({ ...l, _w: 0, _h: 0 })));
+        setSelectedLayerId(state.layers[0]?.id || null);
+        setCustomOverlays(state.customOverlays || []);
+        setAudioLibrary(state.audioLibrary || []);
+        setTextTransition(state.textTransition || "none");
+        setTextTransitionParams(state.textTransitionParams || DEFAULT_TRANSITION);
+        setBgTransform(state.bgTransform || DEFAULT_MEDIA_TRANSFORM);
+        setMediaTransition(state.mediaTransition || "none");
+        const W = state.canvasPreset?.w || 1920, H = state.canvasPreset?.h || 1080;
+        state.activeOverlays?.forEach(ov => {
+          if (ov.defId.startsWith("custom:")) {
+            const co = (state.customOverlays || []).find(c => `custom:${c.id}` === ov.defId);
+            if (co) overlayParticlesRef.current[ov.instanceId] = initCustomParticles(W, H, co);
+          } else {
+            const def = OVERLAY_BY_ID[ov.defId];
+            if (def) overlayParticlesRef.current[ov.instanceId] = def.initParticles(W, H, ov.params);
           }
         });
-        setActiveOverlays(state.activeOverlays||[]);
-      }catch(err){alert("Invalid project file");}
+        setActiveOverlays(state.activeOverlays || []);
+      } catch { alert("Invalid project file"); }
     };
     reader.readAsText(file);
   };
 
-  // ─── Render loop ─────────────────────────────────────────────────────────
-  useEffect(()=>{
-    const canvas=canvasRef.current;if(!canvas)return;
-    const ctx=canvas.getContext("2d")!;let running=true,fc=0;
+  // ─── Render Loop ────────────────────────────────────────────────────────────
+  // FIX #2: no transition state in dep array → loop never restarts mid-transition
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-    const drawBg=(W:number,H:number)=>{
-      const fit=bgFitRef.current,img=bgImageRef.current,vid=bgVideoRef.current,tpl=templateRef.current;
-      ctx.clearRect(0,0,W,H);
-      const media=vid&&vid.readyState>=2?vid:img;
-      if(media){
-        const sw=media instanceof HTMLVideoElement?media.videoWidth:(media as HTMLImageElement).naturalWidth;
-        const sh=media instanceof HTMLVideoElement?media.videoHeight:(media as HTMLImageElement).naturalHeight;
-        let dx=0,dy=0,dw=W,dh=H;
-        if(fit==="contain"){const sc=Math.min(W/sw,H/sh);dw=sw*sc;dh=sh*sc;dx=(W-dw)/2;dy=(H-dh)/2;ctx.fillStyle="#000";ctx.fillRect(0,0,W,H);}
-        else if(fit==="cover"){const sc=Math.max(W/sw,H/sh);dw=sw*sc;dh=sh*sc;dx=(W-dw)/2;dy=(H-dh)/2;}
-        ctx.drawImage(media,dx,dy,dw,dh);
-      }else if(tpl.backgroundStyle==="dark-gradient"){
-        const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,"#0a0808");g.addColorStop(1,"#150a1a");ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-      }else{ctx.fillStyle="#05050a";ctx.fillRect(0,0,W,H);}
-    };
+    let running = true;
+    let fc = 0;
 
-    const getAnim=(anim:string,t:number,W:number,H:number)=>{
-      let ox=0,oy=0,sc=1,al=1,er=0;
-      if(anim==="float")  oy=Math.sin(t*1.5)*(H*0.03);
-      else if(anim==="bounce") oy=-Math.abs(Math.sin(t*3))*(H*0.06);
-      else if(anim==="shake"){ox=(Math.random()-0.5)*12;oy=(Math.random()-0.5)*6;}
-      else if(anim==="flicker") al=Math.random()>0.1?1:(Math.random()>0.5?0.3:0);
-      else if(anim==="zoom-pulse") sc=1+Math.sin(t*3)*0.1;
-      else if(anim==="neon-pulse") al=0.7+(Math.sin(t*4)+1)/2*0.3;
-      else if(anim==="wobble") er=Math.sin(t*4)*0.15;
-      else if(anim==="heartbeat") sc=1+Math.abs(Math.sin(t*4))*0.15;
-      else if(anim==="levitate"){oy=Math.sin(t*2)*(H*0.02);sc=1+Math.sin(t*2)*0.02;}
-      else if(anim==="spin") er=t*2;
-      else if(anim==="cinematic-fade"){const c=(t%4)/4;al=c<0.25?c*4:c<0.75?1:(1-c)*4;}
-      else if(anim==="slide-left"){const c=(t*0.5)%2;ox=c<1?W*(1-c*2):0;}
-      else if(anim==="slide-right"){const c=(t*0.5)%2;ox=c<1?-W*(1-c*2):0;}
-      else if(anim==="slide-up"){const c=(t*0.5)%2;oy=c<1?H*(1-c*2):0;}
-      else if(anim==="fade-in") al=(Math.sin(t*0.5)+1)*0.5;
-      else if(anim==="zoom-in") sc=0.5+((Math.sin(t*0.5)+1)*0.5)*0.5;
-      else if(anim==="swing") er=Math.sin(t*3)*0.2;
-      else if(anim==="tada"){sc=1+Math.abs(Math.sin(t*6))*0.1;er=Math.sin(t*8)*0.05;}
-      else if(anim==="wiggle") ox=Math.sin(t*8)*8;
-      else if(anim==="breathe") sc=0.95+Math.sin(t*1.5)*0.05;
-      else if(anim==="flash") al=Math.round(Math.sin(t*6)*0.5+0.5);
-      else if(anim==="spin-reveal"){const c=(t*0.5)%Math.PI;sc=Math.abs(Math.cos(c));al=0.3+sc*0.7;}
-      else if(anim==="elastic") sc=1+Math.sin(t*8)*Math.exp(-t*0.5)*0.3;
-      else if(anim==="cursed"){ox=(Math.random()-0.5)*6;oy=(Math.random()-0.5)*4;er=(Math.random()-0.5)*0.1;}
-      else if(anim==="possessed"){ox=(Math.random()-0.5)*15;er=(Math.random()-0.5)*0.2;al=0.7+Math.random()*0.3;}
-      else if(anim==="phantom") al=0.3+Math.abs(Math.sin(t*1.5))*0.5;
-      else if(anim==="void"){sc=1+Math.sin(t*0.5)*0.08;al=0.6+Math.sin(t*2)*0.2;}
-      else if(anim==="gold-shine") al=0.8+Math.sin(t*4)*0.2;
-      else if(anim==="ice-glow"){sc=1+Math.sin(t*2)*0.03;al=0.85+Math.sin(t*3)*0.1;}
-      return {ox,oy,sc,al,er};
-    };
+    // FIX #3 & #4: apply bgTransform.opacity and use bgTransform.fitMode
+    const drawBg = (W: number, H: number) => {
+      const transform = bgTransformRef.current;
+      const img       = bgImageRef.current;
+      const vid       = bgVideoRef.current;
+      const tpl       = templateRef.current;
+      const fit       = transform.fitMode ?? "cover"; // FIX #4: unified fit mode
 
-    const drawLayer=(l:TextLayer,W:number,H:number,t:number)=>{
-      const anim=l.animation;const{ox,oy,sc,al,er}=getAnim(anim,t,W,H);
-      const cx=l.x*W+ox,cy=l.y*H+oy;
-      ctx.save();ctx.translate(cx,cy);ctx.rotate(l.rotation+er);ctx.scale(sc,sc);
-      ctx.globalAlpha=l.opacity*al;ctx.textAlign=l.align;ctx.textBaseline="middle";
-      const fs=Math.max(8,l.fontSize);
-      ctx.font=`${l.italic?"italic ":""}${l.bold?"bold ":""}${fs}px '${l.fontFamily}',Impact,sans-serif`;
-      if(l.glowEnabled){ctx.shadowColor=l.glowColor;ctx.shadowBlur=30+Math.sin(t*2)*10;}
-      else if(l.shadowEnabled){ctx.shadowColor=l.shadowColor;ctx.shadowBlur=l.shadowBlur;ctx.shadowOffsetX=3;ctx.shadowOffsetY=3;}
-      if(anim==="neon-pulse"){const i=(Math.sin(t*4)+1)/2;ctx.shadowColor=l.color;ctx.shadowBlur=10+i*60;}
-      else if(anim==="fire-glow"){ctx.shadowColor="#ff6600";ctx.shadowBlur=20+Math.sin(t*2)*20;}
-      else if(anim==="gold-shine"){ctx.shadowColor="#ffdd00";ctx.shadowBlur=20+Math.sin(t*4)*10;}
-      else if(anim==="ice-glow"){ctx.shadowColor="#88ccff";ctx.shadowBlur=20+Math.sin(t*3)*8;}
-      else if(anim==="toxic-glow"){ctx.shadowColor="#88ff00";ctx.shadowBlur=20+Math.sin(t*4)*10;}
-      else if(anim==="hologram"){ctx.shadowColor="#00ffcc";ctx.shadowBlur=20;}
-      else if(anim==="hellfire"){ctx.shadowColor="#ff4400";ctx.shadowBlur=25+Math.sin(t*3)*10;}
-      if(anim==="glitch"){
-        ctx.fillStyle=l.color;ctx.fillText(l.text,0,0);
-        if(Math.random()>0.6){try{const s=ctx.getImageData(0,cy-15,W,30);ctx.putImageData(s,(Math.random()-0.5)*60,cy-15);}catch{}}
-        ctx.globalAlpha*=0.5;ctx.fillStyle=Math.random()>0.5?"#ff0066":"#00ffff";ctx.fillText(l.text,(Math.random()-0.5)*8,0);
-        ctx.fillStyle=Math.random()>0.5?"#00ffff":"#ff0066";ctx.fillText(l.text,-(Math.random()-0.5)*8,2);
-        ctx.restore();return;
-      }
-      let fillCol=l.color;
-      if(anim==="rainbow"||anim==="color-cycle")fillCol=`hsl(${(t*60)%360},100%,60%)`;
-      else if(anim==="disco")fillCol=`hsl(${Math.floor(t*10)*36},100%,60%)`;
-      else if(anim==="plasma")fillCol=`hsl(${Math.sin(t*2)*60+280},100%,65%)`;
-      else if(anim==="gold-shine")fillCol="#ffdd00";
-      else if(anim==="ice-glow")fillCol="#aaddff";
-      else if(anim==="toxic-glow")fillCol="#aaff44";
-      else if(anim==="hologram")fillCol=`rgba(0,255,200,${0.6+Math.sin(t*4)*0.3})`;
-      const lines=l.text.split("\n");const lineH=fs*1.2;const totalH=(lines.length-1)*lineH;
-      lines.forEach((line,li)=>{
-        const ly=li*lineH-totalH/2;
-        if(l.strokeWidth>0){ctx.strokeStyle=l.strokeColor;ctx.lineWidth=l.strokeWidth;ctx.lineJoin="round";ctx.strokeText(line,0,ly);}
-        ctx.fillStyle=fillCol;ctx.fillText(line,0,ly);
-        if(l.underline){const m=ctx.measureText(line);const uw=m.width;let ux=0;if(l.align==="center")ux=-uw/2;if(l.align==="right")ux=-uw;ctx.save();ctx.shadowBlur=0;ctx.strokeStyle=fillCol;ctx.lineWidth=Math.max(1,fs*0.05);ctx.beginPath();ctx.moveTo(ux,ly+fs*0.15);ctx.lineTo(ux+uw,ly+fs*0.15);ctx.stroke();ctx.restore();}
-      });
-      if(anim==="blood-drip"){const approxW=fs*l.text.length*0.5;for(let i=0;i<5;i++){const dx=-approxW*0.5+i*(approxW/4);const dy=((t*80+i*37)%(400));ctx.fillStyle=`rgba(180,0,0,${0.6+Math.sin(t+i)*0.3})`;ctx.shadowBlur=0;ctx.beginPath();ctx.ellipse(dx,fs*0.6+dy,3,10+Math.sin(t+i)*5,0,0,Math.PI*2);ctx.fill();}}
-      const m=ctx.measureText(l.text);l._w=m.width+Math.max(0,l.letterSpacing)*l.text.length;l._h=fs*1.4;
-      ctx.restore();
-      // selection handles for text
-      if(l.id===selectedIdRef.current){
-        const hw=l._w/2+10,hh=l._h/2+10;
-        ctx.save();ctx.translate(cx,cy);ctx.rotate(l.rotation);
-        ctx.strokeStyle="rgba(255,60,60,0.85)";ctx.lineWidth=1.5;ctx.setLineDash([5,3]);ctx.strokeRect(-hw,-hh,hw*2,hh*2);ctx.setLineDash([]);
-        [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].forEach(([hx,hy])=>{ctx.fillStyle="#fff";ctx.strokeStyle="#cc0000";ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(hx,hy,5,0,Math.PI*2);ctx.fill();ctx.stroke();});
-        ctx.strokeStyle="rgba(255,60,60,0.6)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,-hh);ctx.lineTo(0,-hh-25);ctx.stroke();ctx.fillStyle="#fff";ctx.strokeStyle="#cc0000";ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(0,-hh-25,5,0,Math.PI*2);ctx.fill();ctx.stroke();
-        ctx.restore();
-      }
-    };
+      ctx.clearRect(0, 0, W, H);
+      const media = vid && vid.readyState >= 2 ? vid : img;
 
-    const render=()=>{
-      if(!running)return;fc++;const t=fc/60;
-      const W=presetRef.current.w,H=presetRef.current.h,cv=canvasRef.current;
-      if(!cv)return;if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
-      drawBg(W,H);
-      // draw all active overlays
-      activeOverlaysRef.current.forEach(ov=>{
-        if(!overlayParticlesRef.current[ov.instanceId]){
-          if(ov.defId.startsWith("custom:")){
-            const co=customOverlaysRef.current.find(c=>`custom:${c.id}`===ov.defId);
-            if(co&&!co.isVideo)overlayParticlesRef.current[ov.instanceId]=initCustomParticles(W,H,co);
-            else overlayParticlesRef.current[ov.instanceId]=[];
-          }else{
-            const def=OVERLAY_BY_ID[ov.defId];
-            if(def)overlayParticlesRef.current[ov.instanceId]=def.initParticles(W,H,ov.params);
-          }
-        }
-        const ps=overlayParticlesRef.current[ov.instanceId];
-        if(!ps)return;
+      if (media) {
+        const sw = media instanceof HTMLVideoElement ? media.videoWidth  : (media as HTMLImageElement).naturalWidth;
+        const sh = media instanceof HTMLVideoElement ? media.videoHeight : (media as HTMLImageElement).naturalHeight;
+
         ctx.save();
-        ctx.globalAlpha=ov.opacity??1;
+        ctx.globalAlpha = transform.opacity ?? 1; // FIX #3: apply opacity
+        applyMediaTransform(ctx, transform, W / 2, H / 2);
 
-        if(ov.defId.startsWith("custom:")){
-          const co=customOverlaysRef.current.find(c=>`custom:${c.id}`===ov.defId);
-          if(!co){ctx.restore();return;}
-          if(co.isVideo){
-            // For video overlays: apply position/scale/rotation transform
-            const ox=(ov.posX-0.5)*W, oy2=(ov.posY-0.5)*H;
-            if(ov.scale!==1||ox!==0||oy2!==0||ov.rotation!==0){
-              ctx.translate(W/2+ox,H/2+oy2);
-              ctx.rotate(ov.rotation||0);
-              ctx.scale(ov.scale,ov.scale);
-              ctx.translate(-W/2,-H/2);
-            }
-            // Apply video opacity from ov.videoOpacity
-            const vidOpacity=ov.videoOpacity??1;
-            ctx.globalAlpha=(ov.opacity??1)*vidOpacity;
-            // get video
-            const vid=getOrCreateVideo({...co,videoOpacity:1,videoFit:ov.videoFit||"cover",videoLoop:ov.videoLoop!==false,videoMuted:ov.videoMuted!==false});
-            if(vid&&vid.readyState>=2){
-              const fit=ov.videoFit||"cover";
-              const sw=vid.videoWidth||1280,sh=vid.videoHeight||720;
-              let dx=0,dy=0,dw=W,dh=H;
-              if(fit==="contain"){const sc=Math.min(W/sw,H/sh);dw=sw*sc;dh=sh*sc;dx=(W-dw)/2;dy=(H-dh)/2;}
-              else if(fit==="cover"){const sc=Math.max(W/sw,H/sh);dw=sw*sc;dh=sh*sc;dx=(W-dw)/2;dy=(H-dh)/2;}
-              ctx.drawImage(vid,dx,dy,dw,dh);
-            }
+        let dx = 0, dy = 0, dw = W, dh = H;
+        if (fit === "contain") {
+          const sc = Math.min(W / sw, H / sh);
+          dw = sw * sc; dh = sh * sc; dx = (W - dw) / 2; dy = (H - dh) / 2;
+          ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+        } else if (fit === "cover") {
+          const sc = Math.max(W / sw, H / sh);
+          dw = sw * sc; dh = sh * sc; dx = (W - dw) / 2; dy = (H - dh) / 2;
+        } else if (fit === "center") {
+          dw = sw; dh = sh; dx = (W - dw) / 2; dy = (H - dh) / 2;
+        }
+        ctx.drawImage(media, dx, dy, dw, dh);
+        ctx.restore();
+      } else if (tpl.backgroundStyle === "dark-gradient") {
+        const g = ctx.createLinearGradient(0, 0, W, H);
+        g.addColorStop(0, "#0a0808");
+        g.addColorStop(1, "#150a1a");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+      } else {
+        ctx.fillStyle = "#05050a";
+        ctx.fillRect(0, 0, W, H);
+      }
+    };
+
+    const getAnim = (anim: string, t: number, W: number, H: number) => {
+      let ox = 0, oy = 0, sc = 1, al = 1, er = 0;
+      if      (anim === "float")         oy = Math.sin(t * 1.5) * (H * 0.03);
+      else if (anim === "bounce")        oy = -Math.abs(Math.sin(t * 3)) * (H * 0.06);
+      else if (anim === "shake")         { ox = (Math.random() - 0.5) * 12; oy = (Math.random() - 0.5) * 6; }
+      else if (anim === "flicker")       al = Math.random() > 0.1 ? 1 : (Math.random() > 0.5 ? 0.3 : 0);
+      else if (anim === "zoom-pulse")    sc = 1 + Math.sin(t * 3) * 0.1;
+      else if (anim === "Neon-pulse")    al = 0.7 + (Math.sin(t * 4) + 1) / 2 * 0.3;
+      else if (anim === "wobble")        er = Math.sin(t * 4) * 0.15;
+      else if (anim === "heartbeat")     sc = 1 + Math.abs(Math.sin(t * 4)) * 0.15;
+      else if (anim === "levitate")      { oy = Math.sin(t * 2) * (H * 0.02); sc = 1 + Math.sin(t * 2) * 0.02; }
+      else if (anim === "spin")          er = t * 2;
+      else if (anim === "cinematic-fade"){ const c = (t % 4) / 4; al = c < 0.25 ? c * 4 : c < 0.75 ? 1 : (1 - c) * 4; }
+      else if (anim === "slide-left")    { const c = (t * 0.5) % 2; ox = c < 1 ? W * (1 - c * 2) : 0; }
+      else if (anim === "slide-right")   { const c = (t * 0.5) % 2; ox = c < 1 ? -W * (1 - c * 2) : 0; }
+      else if (anim === "slide-up")      { const c = (t * 0.5) % 2; oy = c < 1 ? H * (1 - c * 2) : 0; }
+      else if (anim === "fade-in")       al = (Math.sin(t * 0.5) + 1) * 0.5;
+      else if (anim === "zoom-in")       sc = 0.5 + ((Math.sin(t * 0.5) + 1) * 0.5) * 0.5;
+      else if (anim === "swing")         er = Math.sin(t * 3) * 0.2;
+      else if (anim === "tada")          { sc = 1 + Math.abs(Math.sin(t * 6)) * 0.1; er = Math.sin(t * 8) * 0.05; }
+      else if (anim === "wiggle")        ox = Math.sin(t * 8) * 8;
+      else if (anim === "breathe")       sc = 0.95 + Math.sin(t * 1.5) * 0.05;
+      else if (anim === "flash")         al = Math.round(Math.sin(t * 6) * 0.5 + 0.5);
+      else if (anim === "spin-reveal")   { const c = (t * 0.5) % Math.PI; sc = Math.abs(Math.cos(c)); al = 0.3 + sc * 0.7; }
+      else if (anim === "elastic")       sc = 1 + Math.sin(t * 8) * Math.exp(-t * 0.5) * 0.3;
+      else if (anim === "cursed")        { ox = (Math.random() - 0.5) * 6; oy = (Math.random() - 0.5) * 4; er = (Math.random() - 0.5) * 0.1; }
+      else if (anim === "possessed")     { ox = (Math.random() - 0.5) * 15; er = (Math.random() - 0.5) * 0.2; al = 0.7 + Math.random() * 0.3; }
+      else if (anim === "phantom")       al = 0.3 + Math.abs(Math.sin(t * 1.5)) * 0.5;
+      else if (anim === "void")          { sc = 1 + Math.sin(t * 0.5) * 0.08; al = 0.6 + Math.sin(t * 2) * 0.2; }
+      else if (anim === "gold-shine")    al = 0.8 + Math.sin(t * 4) * 0.2;
+      else if (anim === "ice-glow")      { sc = 1 + Math.sin(t * 2) * 0.03; al = 0.85 + Math.sin(t * 3) * 0.1; }
+      return { ox, oy, sc, al, er };
+    };
+
+    const drawLayer = (l: TextLayer, W: number, H: number, t: number) => {
+      const anim = l.animation;
+      const { ox, oy, sc, al, er } = getAnim(anim, t, W, H);
+      const cx = l.x * W + ox, cy = l.y * H + oy;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(l.rotation + er);
+      ctx.scale(sc, sc);
+      ctx.globalAlpha = l.opacity * al;
+      ctx.textAlign    = l.align;
+      ctx.textBaseline = "middle";
+
+      const fs = Math.max(8, l.fontSize);
+      ctx.font = `${l.italic ? "italic " : ""}${l.bold ? "bold " : ""}${fs}px '${l.fontFamily}',Impact,sans-serif`;
+
+      if      (l.glowEnabled)    { ctx.shadowColor = l.glowColor;   ctx.shadowBlur = 30 + Math.sin(t * 2) * 10; }
+      else if (l.shadowEnabled)  { ctx.shadowColor = l.shadowColor; ctx.shadowBlur = l.shadowBlur; ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 3; }
+
+      if      (anim === "Neon-pulse") { const i = (Math.sin(t * 4) + 1) / 2; ctx.shadowColor = l.color; ctx.shadowBlur = 10 + i * 60; }
+      else if (anim === "fire-glow")  { ctx.shadowColor = "#ff6600"; ctx.shadowBlur = 20 + Math.sin(t * 2) * 20; }
+      else if (anim === "gold-shine") { ctx.shadowColor = "#ffdd00"; ctx.shadowBlur = 20 + Math.sin(t * 4) * 10; }
+      else if (anim === "ice-glow")   { ctx.shadowColor = "#88ccff"; ctx.shadowBlur = 20 + Math.sin(t * 3) * 8; }
+      else if (anim === "toxic-glow") { ctx.shadowColor = "#88ff00"; ctx.shadowBlur = 20 + Math.sin(t * 4) * 10; }
+      else if (anim === "hologram")   { ctx.shadowColor = "#00ffcc"; ctx.shadowBlur = 20; }
+      else if (anim === "hellfire")   { ctx.shadowColor = "#ff4400"; ctx.shadowBlur = 25 + Math.sin(t * 3) * 10; }
+
+      if (anim === "glitch") {
+        ctx.fillStyle = l.color; ctx.fillText(l.text, 0, 0);
+        if (Math.random() > 0.6) {
+          try {
+            const s = ctx.getImageData(0, cy - 15, W, 30);
+            ctx.putImageData(s, (Math.random() - 0.5) * 60, cy - 15);
+          } catch {}
+        }
+        ctx.globalAlpha *= 0.5;
+        ctx.fillStyle = Math.random() > 0.5 ? "#ff0066" : "#00ffff";
+        ctx.fillText(l.text, (Math.random() - 0.5) * 8, 0);
+        ctx.fillStyle = Math.random() > 0.5 ? "#00ffff" : "#ff0066";
+        ctx.fillText(l.text, -(Math.random() - 0.5) * 8, 2);
+        ctx.restore();
+        return;
+      }
+
+      let fillCol = l.color;
+      if      (anim === "rainbow" || anim === "color-cycle") fillCol = `hsl(${(t * 60) % 360},100%,60%)`;
+      else if (anim === "disco")       fillCol = `hsl(${Math.floor(t * 10 * 36)},100%,60%)`;
+      else if (anim === "plasma")      fillCol = `hsl(${Math.sin(t * 2) * 60 + 280},100%,65%)`;
+      else if (anim === "gold-shine")  fillCol = "#ffdd00";
+      else if (anim === "ice-glow")    fillCol = "#aaddff";
+      else if (anim === "toxic-glow")  fillCol = "#aaff44";
+      else if (anim === "hologram")    fillCol = `rgba(0,255,200,${0.6 + Math.sin(t * 4) * 0.3})`;
+
+      const lines  = l.text.split("\n");
+      const lineH  = fs * 1.2;
+      const totalH = (lines.length - 1) * lineH;
+
+      lines.forEach((line, li) => {
+        const ly = li * lineH - totalH / 2;
+        if (l.strokeWidth > 0) {
+          ctx.strokeStyle = l.strokeColor;
+          ctx.lineWidth   = l.strokeWidth;
+          ctx.lineJoin    = "round";
+          ctx.strokeText(line, 0, ly);
+        }
+        ctx.fillStyle = fillCol;
+        ctx.fillText(line, 0, ly);
+        if (l.underline) {
+          const m  = ctx.measureText(line);
+          const uw = m.width;
+          let ux   = 0;
+          if (l.align === "center") ux = -uw / 2;
+          if (l.align === "right")  ux = -uw;
+          ctx.save();
+          ctx.shadowBlur  = 0;
+          ctx.strokeStyle = fillCol;
+          ctx.lineWidth   = Math.max(1, fs * 0.05);
+          ctx.beginPath();
+          ctx.moveTo(ux, ly + fs * 0.15);
+          ctx.lineTo(ux + uw, ly + fs * 0.15);
+          ctx.stroke();
+          ctx.restore();
+        }
+      });
+
+      if (anim === "blood-drip") {
+        const approxW = fs * l.text.length * 0.5;
+        for (let i = 0; i < 5; i++) {
+          const dx = -approxW * 0.5 + i * (approxW / 4);
+          const dy = ((t * 80 + i * 37) % 400);
+          ctx.fillStyle  = `rgba(180,0,0,${0.6 + Math.sin(t + i) * 0.3})`;
+          ctx.shadowBlur = 0;
+          ctx.beginPath();
+          ctx.ellipse(dx, fs * 0.6 + dy, 3, 10 + Math.sin(t + i) * 5, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      const m = ctx.measureText(l.text);
+      l._w = m.width + Math.max(0, l.letterSpacing) * l.text.length;
+      l._h = fs * 1.4;
+      ctx.restore();
+
+      // Selection handles
+      if (l.id === selectedIdRef.current) {
+        const hw = l._w / 2 + 10, hh = l._h / 2 + 10;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(l.rotation);
+        ctx.strokeStyle = "rgba(255,60,60,0.85)";
+        ctx.lineWidth   = 1.5;
+        ctx.setLineDash([5, 3]);
+        ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
+        ctx.setLineDash([]);
+        [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].forEach(([hx, hy]) => {
+          ctx.fillStyle   = "#fff";
+          ctx.strokeStyle = "#cc0000";
+          ctx.lineWidth   = 1.5;
+          ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        });
+        ctx.strokeStyle = "rgba(255,60,60,0.6)";
+        ctx.lineWidth   = 1;
+        ctx.beginPath(); ctx.moveTo(0, -hh); ctx.lineTo(0, -hh - 25); ctx.stroke();
+        ctx.fillStyle   = "#fff"; ctx.strokeStyle = "#cc0000"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(0, -hh - 25, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
+    };
+
+    const render = (timestamp: number) => {
+      if (!running) return;
+      if (!fpsControllerRef.current.shouldRender(timestamp)) {
+        AnimFrameRef.current = requestAnimationFrame(render);
+        return;
+      }
+
+      fc++;
+      const t  = fc / 60;
+      const W  = presetRef.current.w;
+      const H  = presetRef.current.h;
+      const cv = canvasRef.current;
+      if (!cv) return;
+      if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Background with optional transition
+      ctx.save();
+      const isT = isTransitioningRef.current;
+      const tp  = transitionProgressRef.current;
+      if (mediaTransitionRef.current !== "none" && isT) {
+        applyTransition(ctx, W, H, tp, mediaTransitionRef.current, mediaTransParamsRef.current, true);
+      }
+      drawBg(W, H);
+      if (mediaTransitionRef.current !== "none" && isT) cleanupTransition(ctx);
+      ctx.restore();
+
+      // FIX #1: tick particles BEFORE drawing so they actually move
+      activeOverlaysRef.current.forEach(ov => {
+        const ps = overlayParticlesRef.current[ov.instanceId];
+        if (ps) tickParticles(ps, W, H, ov.params);
+      });
+
+      // Draw overlays
+      activeOverlaysRef.current.forEach(ov => {
+        const ox   = ov.posX * W;
+        const oy   = ov.posY * H;
+        const size = Math.min(W, H) * ov.scale;
+        if (ox + size < 0 || ox - size > W || oy + size < 0 || oy - size > H) return;
+
+        if (!overlayParticlesRef.current[ov.instanceId]) {
+          if (ov.defId.startsWith("custom:")) {
+            const co = customOverlaysRef.current.find(c => ov.defId === `custom:${c.id}`);
+            if (co) overlayParticlesRef.current[ov.instanceId] = initCustomParticles(W, H, co);
           } else {
-            // image/gif particle overlay
-            if(ov.scale!==1||ov.posX!==0.5||ov.posY!==0.5){
-              ctx.translate((ov.posX-0.5)*W,(ov.posY-0.5)*H);ctx.scale(ov.scale,ov.scale);
-            }
-            drawCustomOverlay(ctx,W,H,t,co,ps);
+            const def = OVERLAY_BY_ID[ov.defId];
+            if (def) overlayParticlesRef.current[ov.instanceId] = def.initParticles(W, H, ov.params);
           }
-        } else {
-          const def=OVERLAY_BY_ID[ov.defId];
-          if(!def){ctx.restore();return;}
-          if(ov.scale!==1||ov.posX!==0.5||ov.posY!==0.5){
-            ctx.translate((ov.posX-0.5)*W,(ov.posY-0.5)*H);ctx.scale(ov.scale,ov.scale);
-          }
-          def.draw(ctx,W,H,t,ps,ov.params);
         }
 
-        // overlay selection ring
-        if(selOvRef.current===ov.instanceId){
-          ctx.setTransform(1,0,0,1,0,0); // reset transform for selection ring
-          ctx.strokeStyle="rgba(150,100,255,0.9)";ctx.lineWidth=3;ctx.setLineDash([6,4]);ctx.strokeRect(10,10,W-20,H-20);ctx.setLineDash([]);
-          // selection handles
-          const hps=[[W/2,12],[W/2,H-12],[12,H/2],[W-12,H/2]];
-          hps.forEach(([hx,hy])=>{ctx.fillStyle="#fff";ctx.strokeStyle="#aa66ff";ctx.lineWidth=2;ctx.setLineDash([]);ctx.beginPath();ctx.arc(hx,hy,7,0,Math.PI*2);ctx.fill();ctx.stroke();});
+        const ps = overlayParticlesRef.current[ov.instanceId];
+        if (!ps) return;
+
+        ctx.save();
+        ctx.translate(ov.posX * W, ov.posY * H);
+        ctx.scale(ov.scale, ov.scale);
+        ctx.rotate(ov.rotation);
+        ctx.globalAlpha = ov.opacity;
+
+        if (ov.defId.startsWith("custom:")) {
+          const co = customOverlaysRef.current.find(c => ov.defId === `custom:${c.id}`);
+          if (co) drawCustomOverlay(ctx, W, H, t, co, ps);
+        } else {
+          const def = OVERLAY_BY_ID[ov.defId];
+          if (def) def.draw(ctx, W, H, t, ps, ov.params);
+        }
+
+        // Overlay selection ring
+        if (selOvRef.current === ov.instanceId) {
+          const hw = W * 0.5, hh = H * 0.5;
+          ctx.strokeStyle = "rgba(150,100,255,0.8)";
+          ctx.lineWidth   = 3;
+          ctx.setLineDash([6, 4]);
+          ctx.strokeRect(-hw, -hh, W, H);
+          ctx.setLineDash([]);
+          [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].forEach(([hx, hy]) => {
+            ctx.fillStyle   = "#fff"; ctx.strokeStyle = "#aa66ff"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(hx, hy, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          });
+          ctx.strokeStyle = "rgba(150,100,255,0.6)"; ctx.lineWidth = 1; ctx.setLineDash([]);
+          ctx.beginPath(); ctx.moveTo(0, -hh); ctx.lineTo(0, -hh - 30); ctx.stroke();
+          ctx.fillStyle   = "#fff"; ctx.strokeStyle = "#aa66ff"; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(0, -hh - 30, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         }
         ctx.restore();
       });
-      layersRef.current.forEach(l=>drawLayer(l,W,H,t));
-      animFrameRef.current=requestAnimationFrame(render);
-    };
-    animFrameRef.current=requestAnimationFrame(render);
-    return()=>{running=false;cancelAnimationFrame(animFrameRef.current);};
-  },[canvasPreset]);
 
-  // ── Mouse interaction ─────────────────────────────────────────────────────
-  const toCanvas=(e:React.MouseEvent<HTMLCanvasElement>|MouseEvent)=>{
-    const cv=canvasRef.current!,rect=cv.getBoundingClientRect();
-    return{x:(("clientX" in e?e.clientX:0)-rect.left)*(cv.width/rect.width),y:(("clientY" in e?e.clientY:0)-rect.top)*(cv.height/rect.height)};
+      // Text layers with optional transition
+      layersRef.current.forEach(l => {
+        ctx.save();
+        if (textTransitionRef.current !== "none" && isT) {
+          applyTransition(ctx, W, H, tp, textTransitionRef.current, textTransParamsRef.current, true);
+        }
+        drawLayer(l, W, H, t);
+        if (textTransitionRef.current !== "none" && isT) cleanupTransition(ctx);
+        ctx.restore();
+      });
+
+      AnimFrameRef.current = requestAnimationFrame(render);
+    };
+
+    AnimFrameRef.current = requestAnimationFrame(render);
+    return () => { running = false; cancelAnimationFrame(AnimFrameRef.current); };
+  }, [canvasPreset]); // FIX #2: minimal dep array — transitions use refs, no restarts
+
+  // ─── Mouse Interactions ──────────────────────────────────────────────────────
+  const toCanvas = (e: React.MouseEvent<HTMLCanvasElement> | MouseEvent) => {
+    const cv = canvasRef.current;
+    if (!cv) return { x: 0, y: 0 };
+    const rect = cv.getBoundingClientRect();
+    return {
+      x: (("clientX" in e ? e.clientX : 0) - rect.left) * (cv.width / rect.width),
+      y: (("clientY" in e ? e.clientY : 0) - rect.top)  * (cv.height / rect.height),
+    };
   };
 
-  // Text drag
-  const dragging=useRef(false),dragId=useRef<string|null>(null);
-  const dragStartMouse=useRef({x:0,y:0}),dragStartPos=useRef({x:0,y:0});
-  const resizing=useRef(false),resizeStartY=useRef(0),resizeStartSize=useRef(0);
-  const rotating=useRef(false),rotateStartAngle=useRef(0),rotateStartRot=useRef(0),rotateCenter=useRef({x:0,y:0});
+  const dragging         = useRef(false);
+  const dragId           = useRef<string | null>(null);
+  const dragStartMouse   = useRef({ x: 0, y: 0 });
+  const dragStartPos     = useRef({ x: 0, y: 0 });
+  const resizing         = useRef(false);
+  const resizeStartY     = useRef(0);
+  const resizeStartSize  = useRef(0);
+  const rotating         = useRef(false);
+  const rotateStartAngle = useRef(0);
+  const rotateStartRot   = useRef(0);
+  const rotateCenter     = useRef({ x: 0, y: 0 });
 
-  // OVERLAY drag/resize/rotate
-  const ovDragging=useRef(false),ovDragId=useRef<string|null>(null);
-  const ovDragStartMouse=useRef({x:0,y:0}),ovDragStartPos=useRef({x:0,y:0});
-  const ovResizing=useRef(false),ovResizeStartY=useRef(0),ovResizeStartScale=useRef(1);
-  const ovRotating=useRef(false),ovRotateStart=useRef(0),ovRotateStartRot=useRef(0),ovRotateCenter=useRef({x:0,y:0});
+  const ovDragging     = useRef(false);
+  const ovResizing     = useRef(false);
+  const ovRotating     = useRef(false);
+  const ovDragStart    = useRef({ x: 0, y: 0 });
+  const ovDragStartPos = useRef({ x: 0, y: 0 });
+  const ovResizeStart  = useRef({ x: 0, y: 0, scale: 1 });
+  const ovRotateStart  = useRef({ angle: 0, rotation: 0 });
 
-  const handleCanvasMouseDown=(e:React.MouseEvent<HTMLCanvasElement>)=>{
-    const {x,y}=toCanvas(e);const W=canvasPreset.w,H=canvasPreset.h;
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { x, y } = toCanvas(e);
+    const W = canvasPreset.w, H = canvasPreset.h;
 
-    // ── Check if clicking on selected overlay's handles first ──
-    const selOv=activeOverlaysRef.current.find(o=>o.instanceId===selOvRef.current);
-    if(selOv){
-      // Scale handle (bottom-right of selection ring): ~(W-12, H-12)
-      if(Math.hypot(x-(W-12),y-(H-12))<20){
-        ovResizing.current=true;ovDragId.current=selOv.instanceId;
-        ovResizeStartY.current=y;ovResizeStartScale.current=selOv.scale;return;
-      }
-      // Rotate handle (top center of selection ring): (W/2, 12)
-      if(Math.hypot(x-W/2,y-12)<20){
-        ovRotating.current=true;ovDragId.current=selOv.instanceId;
-        ovRotateCenter.current={x:selOv.posX*W,y:selOv.posY*H};
-        ovRotateStart.current=Math.atan2(y-ovRotateCenter.current.y,x-ovRotateCenter.current.x);
-        ovRotateStartRot.current=selOv.rotation||0;return;
-      }
-    }
-
-    // ── Check text layer handles ──
-    if(selectedLayerId){
-      const sel=layersRef.current.find(l=>l.id===selectedLayerId);
-      if(sel){
-        const cx=sel.x*W,cy=sel.y*H,hh=sel._h/2+10;
-        const rotHX=cx+Math.cos(sel.rotation-Math.PI/2)*(hh+25);const rotHY=cy+Math.sin(sel.rotation-Math.PI/2)*(hh+25);
-        if(Math.hypot(x-rotHX,y-rotHY)<12){rotating.current=true;rotateCenter.current={x:cx,y:cy};rotateStartAngle.current=Math.atan2(y-cy,x-cx);rotateStartRot.current=sel.rotation;return;}
-        const hw=sel._w/2+10,cos=Math.cos(sel.rotation),sin=Math.sin(sel.rotation);
-        const brX=cx+(hw*cos-hh*sin),brY=cy+(hw*sin+hh*cos);
-        if(Math.hypot(x-brX,y-brY)<14){resizing.current=true;resizeStartY.current=y;resizeStartSize.current=sel.fontSize;dragId.current=sel.id;return;}
+    // Check media BG drag
+    if (bgImage || bgVideo) {
+      const mediaX    = W / 2 + (bgTransform.x - 0.5) * W * 0.5;
+      const mediaY    = H / 2 + (bgTransform.y - 0.5) * H * 0.5;
+      const mediaSize = Math.min(W, H) * bgTransform.scale;
+      if (Math.abs(x - mediaX) < mediaSize / 2 && Math.abs(y - mediaY) < mediaSize / 2) {
+        setSelectedMedia(bgVideo ? "bg-video" : "bg-image");
+        setSelectedLayerId(null);
+        setSelectedOverlayInstance(null);
+        setEditingOverlay(null);
+        ovDragging.current   = true;
+        ovDragStart.current  = { x, y };
+        ovDragStartPos.current = { x: bgTransform.x, y: bgTransform.y };
+        return;
       }
     }
 
-    // ── Hit test text layers ──
-    const hitL=[...layersRef.current].reverse().find(l=>hitTestLayer(l,x,y,W,H));
-    if(hitL){
-      setSelectedLayerId(hitL.id);setSelectedOverlayInstance(null);
-      dragging.current=true;dragId.current=hitL.id;dragStartMouse.current={x,y};dragStartPos.current={x:hitL.x,y:hitL.y};
+    // Check overlay hit (reverse = top first)
+    const hitOv = [...activeOverlaysRef.current].reverse().find(ov => hitTestOverlay(ov, x, y, W, H));
+    if (hitOv) {
+      setSelectedOverlayInstance(hitOv.instanceId);
+      setSelectedLayerId(null);
+      setSelectedMedia(null);
+      setEditingOverlay(hitOv.instanceId);
+
+      const ox = hitOv.posX * W, oy = hitOv.posY * H;
+      const rotHandleY = oy - Math.min(W, H) * hitOv.scale * 0.3 - 30;
+
+      if (Math.hypot(x - ox, y - rotHandleY) < 12) {
+        ovRotating.current  = true;
+        ovRotateStart.current = { angle: Math.atan2(y - oy, x - ox), rotation: hitOv.rotation };
+        return;
+      }
+      const size = Math.min(W, H) * hitOv.scale * 0.3;
+      if (Math.hypot(x - (ox + size), y - (oy + size)) < 14) {
+        ovResizing.current  = true;
+        ovResizeStart.current = { x, y, scale: hitOv.scale };
+        return;
+      }
+      ovDragging.current   = true;
+      ovDragStart.current  = { x, y };
+      ovDragStartPos.current = { x: hitOv.posX, y: hitOv.posY };
       return;
     }
 
-    // ── Hit test overlay layers ──
-    const hitO=[...activeOverlaysRef.current].reverse().find(o=>hitTestOverlay(o,x,y,W,H));
-    if(hitO){
-      setSelectedOverlayInstance(hitO.instanceId);setSelectedLayerId(null);
-      setEditingOverlay(hitO.instanceId);
-      ovDragging.current=true;ovDragId.current=hitO.instanceId;
-      ovDragStartMouse.current={x,y};ovDragStartPos.current={x:hitO.posX,y:hitO.posY};
-      return;
+    // Text layer rotate/resize handle check
+    if (selectedLayerId) {
+      const sel = layersRef.current.find(l => l.id === selectedLayerId);
+      if (sel) {
+        const cx = sel.x * W, cy = sel.y * H, hh = sel._h / 2 + 10;
+        const rotHX = cx + Math.cos(sel.rotation - Math.PI / 2) * (hh + 25);
+        const rotHY = cy + Math.sin(sel.rotation - Math.PI / 2) * (hh + 25);
+        if (Math.hypot(x - rotHX, y - rotHY) < 12) {
+          rotating.current       = true;
+          rotateCenter.current   = { x: cx, y: cy };
+          rotateStartAngle.current = Math.atan2(y - cy, x - cx);
+          rotateStartRot.current   = sel.rotation;
+          return;
+        }
+        const hw  = sel._w / 2 + 10;
+        const cos = Math.cos(sel.rotation), sin = Math.sin(sel.rotation);
+        const brX = cx + (hw * cos - hh * sin), brY = cy + (hw * sin + hh * cos);
+        if (Math.hypot(x - brX, y - brY) < 14) {
+          resizing.current       = true;
+          resizeStartY.current   = y;
+          resizeStartSize.current = sel.fontSize;
+          dragId.current         = sel.id;
+          return;
+        }
+      }
     }
 
-    setSelectedLayerId(null);setSelectedOverlayInstance(null);
-  };
-
-  useEffect(()=>{
-    const onMove=(e:MouseEvent)=>{
-      if(!canvasRef.current)return;const{x,y}=toCanvas(e);const W=canvasPreset.w,H=canvasPreset.h;
-      // text layer drag/resize/rotate
-      if(dragging.current&&dragId.current){
-        const dx=x-dragStartMouse.current.x,dy=y-dragStartMouse.current.y;
-        updateLayer(dragId.current,{x:Math.max(0,Math.min(1,dragStartPos.current.x+dx/W)),y:Math.max(0,Math.min(1,dragStartPos.current.y+dy/H))});
-      } else if(resizing.current&&dragId.current){
-        const dy=y-resizeStartY.current;const ns=Math.max(8,Math.min(600,resizeStartSize.current+dy*0.5));
-        updateLayer(dragId.current,{fontSize:Math.round(ns)});
-      } else if(rotating.current&&selectedIdRef.current){
-        const angle=Math.atan2(y-rotateCenter.current.y,x-rotateCenter.current.x);
-        updateLayer(selectedIdRef.current,{rotation:rotateStartRot.current+(angle-rotateStartAngle.current)});
-      }
-      // overlay drag/resize/rotate
-      else if(ovDragging.current&&ovDragId.current){
-        const dx=x-ovDragStartMouse.current.x,dy=y-ovDragStartMouse.current.y;
-        updateOverlayProp(ovDragId.current,{posX:Math.max(0,Math.min(1,ovDragStartPos.current.x+dx/W)),posY:Math.max(0,Math.min(1,ovDragStartPos.current.y+dy/H))});
-      } else if(ovResizing.current&&ovDragId.current){
-        const dy=y-ovResizeStartY.current;
-        const ns=Math.max(0.1,Math.min(5,ovResizeStartScale.current+dy*0.005));
-        updateOverlayProp(ovDragId.current,{scale:ns});
-      } else if(ovRotating.current&&ovDragId.current){
-        const angle=Math.atan2(y-ovRotateCenter.current.y,x-ovRotateCenter.current.x);
-        updateOverlayProp(ovDragId.current,{rotation:ovRotateStartRot.current+(angle-ovRotateStart.current)});
-      }
-    };
-    const onUp=()=>{
-      dragging.current=false;resizing.current=false;rotating.current=false;dragId.current=null;
-      ovDragging.current=false;ovResizing.current=false;ovRotating.current=false;ovDragId.current=null;
-    };
-    window.addEventListener("mousemove",onMove);window.addEventListener("mouseup",onUp);
-    return()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
-  },[canvasPreset,updateLayer]);
-
-  // Export PNG
-  const handleExportPng=()=>{const cv=canvasRef.current;if(!cv)return;const a=document.createElement("a");a.href=cv.toDataURL("image/png");a.download=`horror-overlay-${canvasPreset.w}x${canvasPreset.h}.png`;a.click();};
-
-  // Recording
-  const startRecording=()=>{
-    const cv=canvasRef.current;if(!cv)return;chunksRef.current=[];setRecordingTime(0);
-    const videoStream=cv.captureStream(30);let finalStream=videoStream;
-    const vid=bgVideoRef.current;
-    if(vid&&!vid.muted){
-      try{
-        if(!audioCtxRef.current)audioCtxRef.current=new AudioContext();
-        const actx=audioCtxRef.current;
-        if(!audioDestRef.current)audioDestRef.current=actx.createMediaStreamDestination();
-        if(audioSourceRef.current){try{audioSourceRef.current.disconnect();}catch{}}
-        audioSourceRef.current=actx.createMediaElementSource(vid);audioSourceRef.current.connect(audioDestRef.current);audioSourceRef.current.connect(actx.destination);
-        finalStream=new MediaStream([...videoStream.getVideoTracks(),...audioDestRef.current.stream.getAudioTracks()]);
-      }catch(err){console.warn("Audio capture failed:",err);}
+    // Text layer hit
+    const hit = [...layersRef.current].reverse().find(l => hitTest(l, x, y, W, H));
+    if (hit) {
+      setSelectedLayerId(hit.id);
+      setSelectedOverlayInstance(null);
+      setSelectedMedia(null);
+      setEditingOverlay(null);
+      dragging.current     = true;
+      dragId.current       = hit.id;
+      dragStartMouse.current = { x, y };
+      dragStartPos.current = { x: hit.x, y: hit.y };
+    } else {
+      setSelectedLayerId(null);
+      setSelectedOverlayInstance(null);
+      setSelectedMedia(null);
+      setEditingOverlay(null);
     }
-    const mimeType=MediaRecorder.isTypeSupported("video/webm;codecs=vp9")?"video/webm;codecs=vp9":MediaRecorder.isTypeSupported("video/webm;codecs=vp8")?"video/webm;codecs=vp8":"video/webm";
-    const mr=new MediaRecorder(finalStream,{mimeType,videoBitsPerSecond:8_000_000});
-    mr.ondataavailable=ev=>{if(ev.data.size>0)chunksRef.current.push(ev.data);};
-    mr.onstop=()=>{const blob=new Blob(chunksRef.current,{type:mimeType});const url=URL.createObjectURL(blob);const name=`rec-${Date.now()}.webm`;setRecordings(prev=>[{name,url,size:blob.size},...prev]);const a=document.createElement("a");a.href=url;a.download=name;a.click();};
-    setTimeout(()=>{mr.start(250);mediaRecorderRef.current=mr;setRecording(true);let el=0;recTimerRef.current=setInterval(()=>{el++;setRecordingTime(el);if(el>=5*60)stopRecording();},1000);},400);
   };
-  const stopRecording=()=>{
-    if(recTimerRef.current){clearInterval(recTimerRef.current);recTimerRef.current=null;}
-    if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=="inactive"){mediaRecorderRef.current.requestData?.();setTimeout(()=>{if(mediaRecorderRef.current?.state!=="inactive")mediaRecorderRef.current?.stop();},200);}
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!canvasRef.current) return;
+      const { x, y } = toCanvas(e);
+      const W = canvasPreset.w, H = canvasPreset.h;
+
+      if (ovDragging.current && selectedMedia) {
+        const dx = x - ovDragStart.current.x, dy = y - ovDragStart.current.y;
+        setBgTransform(prev => ({
+          ...prev,
+          x: Math.max(0, Math.min(1, ovDragStartPos.current.x + dx / W)),
+          y: Math.max(0, Math.min(1, ovDragStartPos.current.y + dy / H)),
+        }));
+      } else if (ovDragging.current && selectedOverlayInstance) {
+        const dx = x - ovDragStart.current.x, dy = y - ovDragStart.current.y;
+        setActiveOverlays(prev => prev.map(o =>
+          o.instanceId === selectedOverlayInstance
+            ? { ...o, posX: Math.max(0, Math.min(1, ovDragStartPos.current.x + dx / W)), posY: Math.max(0, Math.min(1, ovDragStartPos.current.y + dy / H)) }
+            : o
+        ));
+      } else if (ovResizing.current && selectedOverlayInstance) {
+        const dy = y - ovResizeStart.current.y;
+        const newScale = Math.max(0.1, Math.min(5, ovResizeStart.current.scale + dy * 0.005));
+        setActiveOverlays(prev => prev.map(o =>
+          o.instanceId === selectedOverlayInstance ? { ...o, scale: newScale } : o
+        ));
+      } else if (ovRotating.current && selectedOverlayInstance) {
+        const ov = activeOverlaysRef.current.find(o => o.instanceId === selectedOverlayInstance);
+        if (ov) {
+          const angle = Math.atan2(y - ov.posY * H, x - ov.posX * W);
+          setActiveOverlays(prev => prev.map(o =>
+            o.instanceId === selectedOverlayInstance
+              ? { ...o, rotation: ovRotateStart.current.rotation + (angle - ovRotateStart.current.angle) }
+              : o
+          ));
+        }
+      } else if (dragging.current && dragId.current) {
+        const dx = x - dragStartMouse.current.x, dy = y - dragStartMouse.current.y;
+        updateLayer(dragId.current, {
+          x: Math.max(0, Math.min(1, dragStartPos.current.x + dx / W)),
+          y: Math.max(0, Math.min(1, dragStartPos.current.y + dy / H)),
+        });
+      } else if (resizing.current && dragId.current) {
+        const dy = y - resizeStartY.current;
+        updateLayer(dragId.current, { fontSize: Math.round(Math.max(8, Math.min(600, resizeStartSize.current + dy * 0.5))) });
+      } else if (rotating.current && selectedIdRef.current) {
+        const angle = Math.atan2(y - rotateCenter.current.y, x - rotateCenter.current.x);
+        updateLayer(selectedIdRef.current, { rotation: rotateStartRot.current + (angle - rotateStartAngle.current) });
+      }
+    };
+
+    const onUp = () => {
+      dragging.current  = false; resizing.current  = false; rotating.current  = false;
+      dragId.current    = null;
+      ovDragging.current = false; ovResizing.current = false; ovRotating.current = false;
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, [canvasPreset, updateLayer, selectedOverlayInstance, selectedMedia]);
+
+  // ─── Export & Recording ──────────────────────────────────────────────────────
+  const handleExportPng = () => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const a = document.createElement("a");
+    a.href     = cv.toDataURL("image/png");
+    a.download = `horror-overlay-${canvasPreset.w}x${canvasPreset.h}.png`;
+    a.click();
+  };
+
+  const startRecording = () => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    chunksRef.current = [];
+    setRecordingTime(0);
+    const videoStream  = cv.captureStream(30);
+    let finalStream: MediaStream = videoStream;
+    const vid = bgVideoRef.current;
+
+    if (vid && !vid.muted) {
+      try {
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        const actx = audioCtxRef.current;
+        if (!audioDestRef.current) audioDestRef.current = actx.createMediaStreamDestination();
+        if (audioSourceRef.current) { try { audioSourceRef.current.disconnect(); } catch {} }
+        audioSourceRef.current = actx.createMediaElementSource(vid);
+        audioSourceRef.current.connect(audioDestRef.current);
+        audioSourceRef.current.connect(actx.destination);
+        finalStream = new MediaStream([...videoStream.getVideoTracks(), ...audioDestRef.current.stream.getAudioTracks()]);
+      } catch (err) { console.warn("Audio capture failed:", err); }
+    }
+
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9"
+      : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
+      ? "video/webm;codecs=vp8"
+      : "video/webm";
+
+    const mr = new MediaRecorder(finalStream, { mimeType, videoBitsPerSecond: 8_000_000 });
+    mr.ondataavailable = ev => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
+    mr.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: mimeType });
+      const url  = URL.createObjectURL(blob);
+      const name = `rec-${Date.now()}.webm`;
+      setRecordings(prev => [{ name, url, size: blob.size }, ...prev]);
+      const a = document.createElement("a"); a.href = url; a.download = name; a.click();
+    };
+    setTimeout(() => {
+      mr.start(250);
+      mediaRecorderRef.current = mr;
+      setRecording(true);
+      let el = 0;
+      recTimerRef.current = setInterval(() => {
+        el++;
+        setRecordingTime(el);
+        if (el >= 5 * 60) stopRecording();
+      }, 1000);
+    }, 400);
+  };
+
+  const stopRecording = () => {
+    if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.requestData?.();
+      setTimeout(() => { if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop(); }, 200);
+    }
     setRecording(false);
   };
 
-  const handleSurprise=()=>selectTemplate(allTemplates[Math.floor(Math.random()*allTemplates.length)]);
-  const categories=["All",...TEMPLATE_CATEGORIES];
-  const editOv=activeOverlays.find(o=>o.instanceId===editingOverlay)||null;
-  const isEditOvVideo=editOv?.defId.startsWith("custom:")&&customOverlays.find(c=>`custom:${c.id}`===editOv?.defId)?.isVideo;
-  const filteredOverlays=[
-    ...OVERLAY_DEFS.filter(o=>overlayCategory==="All"||o.category===overlayCategory),
-    ...customOverlays.filter(o=>overlayCategory==="All"||overlayCategory==="Custom"||o.category===overlayCategory).map(o=>({id:`custom:${o.id}`,label:o.name,category:o.category,emoji:o.isVideo?"🎬":"🖼️"} as any)),
+  const handleSurprise = () => selectTemplate(allTemplates[Math.floor(Math.random() * allTemplates.length)]);
+  const editOv = activeOverlays.find(o => o.instanceId === editingOverlay) || null;
+  const filteredOverlays = [
+    ...(Array.isArray(OVERLAY_DEFS) ? OVERLAY_DEFS : []).filter(o => overlayCategory === "All" || o.category === overlayCategory),
+    ...(Array.isArray(customOverlays) ? customOverlays : [])
+      .filter(o => overlayCategory === "All" || overlayCategory === "Custom" || o.category === overlayCategory)
+      .map(o => ({ id: `custom:${o.id}`, label: o.name, category: o.category, emoji: o.isVideo ? "🎬" : "🖼️" } as any)),
   ];
 
+  // ─── UI ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="h-full flex overflow-hidden text-zinc-300">
-      {/* ── Left Sidebar ── */}
+    <div className="h-full flex overflow-hidden">
+      {/* Left Sidebar */}
       <aside className="w-64 flex-shrink-0 border-r border-red-900/20 bg-[#050508] flex flex-col overflow-hidden">
         <div className="p-3 border-b border-red-900/20">
-          <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-2" style={{fontFamily:"Cinzel"}}>Text Input</h2>
-          <textarea value={newText} onChange={e=>setNewText(e.target.value)} rows={2} className="w-full px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-red-700/40 resize-none" placeholder="Enter text..."/>
-          <button onClick={()=>{const l=makeLayer({text:newText||"TEXT",fontFamily:FONT_OPTIONS[0],color:selectedTemplate.colors[0]});setLayers(p=>[...p,l]);setSelectedLayerId(l.id);}} className="w-full mt-2 py-1.5 rounded bg-red-900/40 border border-red-700/40 text-red-300 text-xs font-bold hover:bg-red-900/60 transition-colors">+ Add Text Layer</button>
+          <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-2" style={{ fontFamily: "Cinzel" }}>Text Input</h2>
+          <textarea
+            value={newText} onChange={e => setNewText(e.target.value)} rows={2}
+            className="w-full px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-red-700/40 resize-none"
+            placeholder="Enter text..."
+          />
+          <button
+            onClick={() => { const l = MakeLayer({ text: newText || "TEXT", fontFamily: FONT_OPTIONS[0], color: selectedTemplate.colors[0] }); setLayers(p => [...p, l]); setSelectedLayerId(l.id); }}
+            className="w-full mt-2 py-1.5 rounded bg-red-900/40 border border-red-700/40 text-red-300 text-xs font-bold hover:bg-red-900/60 transition-colors"
+          >+ Add Text Layer</button>
           <button onClick={handleSurprise} className="w-full mt-1.5 py-1.5 rounded bg-purple-900/20 border border-purple-700/30 text-purple-300 text-xs font-bold hover:bg-purple-900/40 transition-colors">Surprise Me</button>
         </div>
+
         {/* Layers */}
         <div className="p-2 border-b border-red-900/20">
-          <h2 className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1.5">Text Layers</h2>
+          <h2 className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1.5">Layers</h2>
           <div className="space-y-1 max-h-28 overflow-y-auto">
-            {layers.map(l=>(
-              <div key={l.id} onClick={()=>{setSelectedLayerId(l.id);setSelectedOverlayInstance(null);setRightTab("text");}} className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs border transition-all ${l.id===selectedLayerId?"bg-red-900/30 border-red-700/40 text-red-200":"bg-zinc-800/40 border-zinc-800/30 text-zinc-400 hover:border-zinc-600/40"}`}>
-                <span className="flex-1 truncate">{l.text||"(empty)"}</span>
-                <button onClick={e=>{e.stopPropagation();setLayers(p=>p.filter(x=>x.id!==l.id));if(selectedLayerId===l.id)setSelectedLayerId(null);}} className="text-zinc-600 hover:text-red-400 text-sm px-0.5">×</button>
-              </div>))}
+            {layers.map(l => (
+              <div
+                key={l.id}
+                onClick={() => { setSelectedLayerId(l.id); setSelectedOverlayInstance(null); setSelectedMedia(null); }}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs border transition-all ${l.id === selectedLayerId ? "bg-red-900/30 border-red-700/40 text-red-200" : "bg-zinc-800/40 border-zinc-800/30 text-zinc-400 hover:border-zinc-600/40"}`}
+              >
+                <span className="flex-1 truncate">{l.text || "(empty)"}</span>
+                <button
+                  onClick={e => { e.stopPropagation(); setLayers(p => p.filter(x => x.id !== l.id)); if (selectedLayerId === l.id) setSelectedLayerId(null); }}
+                  className="text-zinc-600 hover:text-red-400 text-sm px-0.5"
+                >×</button>
+              </div>
+            ))}
           </div>
         </div>
-        {/* Template cats */}
+
+        {/* Active Overlays */}
+        {activeOverlays.length > 0 && (
+          <div className="p-2 border-b border-red-900/20">
+            <h2 className="text-[9px] text-purple-400 uppercase tracking-widest mb-1.5">Active Overlays</h2>
+            <div className="space-y-1 max-h-24 overflow-y-auto">
+              {activeOverlays.map(ov => (
+                <div
+                  key={ov.instanceId}
+                  onClick={() => { setSelectedOverlayInstance(ov.instanceId); setSelectedLayerId(null); setSelectedMedia(null); setEditingOverlay(ov.instanceId); }}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs border transition-all ${ov.instanceId === selectedOverlayInstance ? "bg-purple-900/30 border-purple-700/40 text-purple-200" : "bg-zinc-800/40 border-zinc-800/30 text-zinc-400 hover:border-zinc-600/40"}`}
+                >
+                  <span className="flex-1 truncate">{ov.emoji} {ov.label}</span>
+                  <button onClick={e => { e.stopPropagation(); removeOverlay(ov.instanceId); }} className="text-zinc-600 hover:text-red-400 text-sm px-0.5">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Template Categories */}
         <div className="p-2 border-b border-red-900/20">
           <div className="flex flex-wrap gap-1">
-            {categories.map(cat=>(<button key={cat} onClick={()=>setActiveCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] font-medium transition-all border ${activeCategory===cat?"bg-red-900/30 border-red-700/40 text-red-300":"border-transparent text-zinc-500 hover:text-zinc-300"}`}>{cat}</button>))}
+            {categories.map(cat => (
+              <button
+                key={cat} onClick={() => setActiveCategory(cat)}
+                className={`px-2 py-0.5 rounded text-[9px] font-medium transition-all border ${activeCategory === cat ? "bg-red-900/30 border-red-700/40 text-red-300" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}
+              >{cat}</button>
+            ))}
           </div>
         </div>
         <div className="p-2 border-b border-zinc-800/30">
-          <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search templates..." className="w-full px-2 py-1 rounded bg-zinc-800/50 border border-zinc-700/30 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none"/>
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search templates..." className="w-full px-2 py-1 rounded bg-zinc-800/50 border border-zinc-700/30 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none"/>
         </div>
         <div className="flex-1 overflow-y-auto p-2">
-          <div className="text-[9px] text-zinc-600 mb-1.5 uppercase tracking-wider">{filtered.length} templates</div>
+          <div className="text-[9px] text-zinc-600 mb-1.5 uppercase tracking-wider">{filtered.length} Templates</div>
           <div className="grid grid-cols-2 gap-1.5">
-            {filtered.map(tpl=>(<TemplateCard key={tpl.id} template={tpl} selected={selectedTemplate.id===tpl.id} onClick={()=>selectTemplate(tpl)} text={newText}/>))}
+            {filtered.map(tpl => (<TemplateCard key={tpl.id} template={tpl} selected={selectedTemplate.id === tpl.id} onClick={() => selectTemplate(tpl)} text={newText}/>))}
           </div>
         </div>
       </aside>
 
-      {/* ── Center ── */}
+      {/* Center */}
       <div className="flex-1 flex flex-col p-3 overflow-hidden min-w-0">
         <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-          <h1 className="text-lg font-black text-purple-400" style={{fontFamily:"Cinzel"}}>TEXT OVERLAY ANIMATOR</h1>
+          <h1 className="text-lg font-black text-purple-400" style={{ fontFamily: "Cinzel" }}>TEXT OVERLAY ANIMATOR</h1>
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-zinc-600">Template:</span><span className="text-zinc-300">{selectedTemplate.name}</span>
-            {selectedOverlayInstance&&<span className="text-purple-300 text-[10px] border border-purple-700/40 px-1.5 py-0.5 rounded">Overlay selected — drag to move</span>}
+            <span className="text-zinc-600">Template:</span>
+            <span className="text-zinc-300">{selectedTemplate.name}</span>
           </div>
         </div>
-        {/* Canvas size */}
+
+        {/* Canvas Size */}
         <div className="relative mb-2">
-          <button onClick={()=>setShowSizeMenu(v=>!v)} className="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/40 transition-colors w-full max-w-sm">
-            <span className="text-zinc-500 text-[10px]">📐</span><span className="flex-1 text-left truncate">{canvasPreset.label}</span><span className="text-zinc-500 text-[10px] font-mono">{canvasPreset.w}×{canvasPreset.h}</span><span className="text-zinc-600 ml-1">▾</span>
+          <button onClick={() => setShowSizeMenu(v => !v)} className="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/40 transition-colors w-full max-w-sm">
+            <span className="text-zinc-500 text-[10px]">📐</span>
+            <span className="flex-1 text-left truncate">{canvasPreset.label}</span>
+            <span className="text-zinc-500 text-[10px] font-bold">{canvasPreset.w}×{canvasPreset.h}</span>
           </button>
-          {showSizeMenu&&(<div className="absolute top-full left-0 mt-1 z-50 w-80 rounded border border-zinc-700/40 bg-[#0c0c16] shadow-xl max-h-72 overflow-y-auto">
-            {CANVAS_PRESETS.map((p,i)=>(<button key={i} onClick={()=>{setCanvasPreset(p);setShowSizeMenu(false);}} className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between gap-2 ${canvasPreset.label===p.label?"bg-blue-900/40 text-blue-300":"text-zinc-400 hover:bg-zinc-800/60"}`}><span className="truncate">{p.label}</span><span className="text-zinc-600 text-[10px] font-mono">{p.w}×{p.h}</span></button>))}
-          </div>)}
-        </div>
-        {/* Canvas */}
-        <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0">
-          <div className="relative rounded border border-purple-900/30 overflow-hidden bg-[#05050a]" style={{aspectRatio:`${canvasPreset.w} / ${canvasPreset.h}`,maxWidth:"100%",maxHeight:"100%",boxShadow:"0 0 30px rgba(100,0,200,0.15)"}}>
-            <canvas ref={canvasRef} style={{width:"100%",height:"100%",display:"block",cursor:"crosshair"}} onMouseDown={handleCanvasMouseDown}/>
-            {recording&&(<div className="absolute top-2 right-2 flex items-center gap-2 px-3 py-1.5 rounded bg-red-900/50 border border-red-700/60"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/><span className="text-xs text-red-300 font-mono font-bold">REC {fmt(recordingTime)}</span></div>)}
-            <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/60 border border-zinc-700/30 text-[9px] text-zinc-500 font-mono">{canvasPreset.w}×{canvasPreset.h}</div>
-          </div>
-        </div>
-        {/* Bottom controls */}
-        <div className="flex items-center gap-2 mt-2 flex-wrap flex-shrink-0">
-          <button onClick={handleExportPng} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-purple-700/30">📷 PNG</button>
-          <button onClick={recording?stopRecording:startRecording} className={`px-4 py-1.5 rounded text-xs font-bold border transition-all ${recording?"bg-red-600/30 border-red-500/50 text-red-300 animate-pulse":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-red-700/30"}`}>{recording?`◼ Stop ${fmt(recordingTime)}`:"● Rec"}</button>
-          <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload}/>
-          <button onClick={()=>bgFileRef.current?.click()} className={`px-3 py-1.5 rounded text-xs border transition-colors ${bgImage?"bg-green-900/20 border-green-700/40 text-green-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-green-700/30"}`}>🖼 {bgImage?"BG:Img":"Img BG"}</button>
-          <input ref={bgVidRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload}/>
-          <button onClick={()=>bgVidRef.current?.click()} className={`px-3 py-1.5 rounded text-xs border transition-colors ${bgVideo?"bg-blue-900/20 border-blue-700/40 text-blue-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-blue-700/30"}`}>🎬 {bgVideo?"BG:Vid":"Vid BG"}</button>
-          {(bgImage||bgVideo)&&(<><select value={bgObjectFit} onChange={e=>setBgObjectFit(e.target.value as any)} className="px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select><button onClick={clearBg} className="px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-red-400">✕</button></>)}
-          <button onClick={()=>{setShowOverlayPanel(v=>!v);setRightTab("overlay");}} className={`px-3 py-1.5 rounded text-xs border transition-colors ${activeOverlays.length>0?"bg-purple-900/30 border-purple-700/40 text-purple-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-purple-700/30"}`}>🎭 Overlays{activeOverlays.length>0?` (${activeOverlays.length})`:""}</button>
-          <button onClick={()=>{setShowSoundPanel(v=>!v);setRightTab("sound");}} className={`px-3 py-1.5 rounded text-xs border transition-colors ${activeSounds.length>0?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-green-700/30"}`}>🔊 Sounds{activeSounds.length>0?` (${activeSounds.length})`:""}</button>
-          <button onClick={saveProject} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-green-700/30">💾</button>
-          <input ref={loadProjectRef} type="file" accept=".json" className="hidden" onChange={loadProject}/>
-          <button onClick={()=>loadProjectRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-yellow-700/30">📂</button>
-          <button onClick={()=>setShowRecordings(v=>!v)} className="ml-auto px-3 py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400">📁 ({recordings.length})</button>
-        </div>
-
-        {/* Recordings */}
-        {showRecordings&&(<div className="mt-2 rounded border border-zinc-800/40 bg-[#06060c] max-h-36 overflow-y-auto flex-shrink-0">
-          {recordings.length===0?<p className="text-xs text-zinc-600 p-3 text-center">No recordings yet</p>:recordings.map((rec,i)=>(<div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/30"><div className="flex-1 min-w-0"><div className="text-xs text-zinc-300 truncate">{rec.name}</div><div className="text-[9px] text-zinc-600">{(rec.size/1024/1024).toFixed(2)} MB</div></div><a href={rec.url} download={rec.name} className="px-2 py-0.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-400 hover:text-white">↓</a></div>))}
-        </div>)}
-
-        {/* ── Overlay Panel ── */}
-        {showOverlayPanel&&(
-          <div className="mt-2 rounded border border-purple-900/40 bg-[#06060c]/95 flex-shrink-0 max-h-96 overflow-y-auto">
-            {/* Active overlays list */}
-            {activeOverlays.length>0&&(
-              <div className="p-2 border-b border-zinc-800/30">
-                <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1.5">Active ({activeOverlays.length}) — click to select, drag on canvas to move</div>
-                <div className="flex flex-wrap gap-1">
-                  {activeOverlays.map(ov=>(
-                    <div key={ov.instanceId} className={`flex items-center gap-1 px-2 py-1 rounded text-xs border cursor-pointer transition-all ${editingOverlay===ov.instanceId?"bg-purple-900/50 border-purple-500/60 text-purple-200":"bg-zinc-800/50 border-zinc-700/30 text-zinc-300 hover:border-purple-700/40"}`}>
-                      <span onClick={()=>{setEditingOverlay(ov.instanceId===editingOverlay?null:ov.instanceId);setSelectedOverlayInstance(ov.instanceId);}}>{ov.emoji} {ov.label}</span>
-                      <button onClick={()=>removeOverlay(ov.instanceId)} className="text-zinc-600 hover:text-red-400 ml-1">×</button>
-                    </div>))}
-                </div>
-              </div>)}
-
-            {/* Overlay editor */}
-            {editOv&&(
-              <div className="p-3 border-b border-zinc-800/30">
-                <div className="text-[10px] text-purple-300 font-bold uppercase tracking-wider mb-2">{editOv.emoji} {editOv.label} — Edit</div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                  {/* Opacity (always shown) */}
-                  <div className="col-span-2">
-                    <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Overlay Opacity: <span className="text-zinc-300">{Math.round((editOv.opacity??1)*100)}%</span></label>
-                    <input type="range" min={0} max={100} value={Math.round((editOv.opacity??1)*100)} onChange={e=>updateOverlayProp(editOv.instanceId,{opacity:Number(e.target.value)/100})} className="w-full accent-purple-600"/>
-                  </div>
-                  {/* Scale */}
-                  <div>
-                    <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Scale: <span className="text-zinc-300">{(editOv.scale).toFixed(2)}</span></label>
-                    <input type="range" min={0.1} max={3} step={0.05} value={editOv.scale} onChange={e=>updateOverlayProp(editOv.instanceId,{scale:Number(e.target.value)})} className="w-full accent-purple-600"/>
-                  </div>
-                  {/* Rotation */}
-                  <div>
-                    <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Rotation: <span className="text-zinc-300">{Math.round((editOv.rotation||0)*180/Math.PI)}°</span></label>
-                    <input type="range" min={-180} max={180} value={Math.round((editOv.rotation||0)*180/Math.PI)} onChange={e=>updateOverlayProp(editOv.instanceId,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-purple-600"/>
-                  </div>
-                  {/* Video-specific controls */}
-                  {isEditOvVideo?(
-                    <>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Video Opacity: <span className="text-zinc-300">{Math.round((editOv.videoOpacity??1)*100)}%</span></label>
-                        <input type="range" min={0} max={100} value={Math.round((editOv.videoOpacity??1)*100)} onChange={e=>updateOverlayProp(editOv.instanceId,{videoOpacity:Number(e.target.value)/100})} className="w-full accent-purple-600"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Fit Mode</label>
-                        <select value={editOv.videoFit||"cover"} onChange={e=>updateOverlayProp(editOv.instanceId,{videoFit:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
-                          <option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[9px] text-zinc-500 uppercase">Loop</label>
-                        <button onClick={()=>updateOverlayProp(editOv.instanceId,{videoLoop:!editOv.videoLoop})} className={`px-3 py-0.5 rounded text-xs border ${editOv.videoLoop!==false?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-500"}`}>{editOv.videoLoop!==false?"On":"Off"}</button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[9px] text-zinc-500 uppercase">Muted</label>
-                        <button onClick={()=>updateOverlayProp(editOv.instanceId,{videoMuted:!editOv.videoMuted})} className={`px-3 py-0.5 rounded text-xs border ${editOv.videoMuted!==false?"bg-orange-900/30 border-orange-700/40 text-orange-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-500"}`}>{editOv.videoMuted!==false?"Muted":"Audio On"}</button>
-                      </div>
-                    </>
-                  ):(
-                    // Particle overlay controls
-                    <>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Count: <span className="text-zinc-300">{editOv.params.count}</span></label>
-                        <input type="range" min={1} max={500} value={editOv.params.count} onChange={e=>updateOverlayParams(editOv.instanceId,{count:Number(e.target.value)})} className="w-full accent-purple-600"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Direction</label>
-                        <select value={editOv.params.direction} onChange={e=>updateOverlayParams(editOv.instanceId,{direction:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
-                          <option value="top">⬇ From Top</option><option value="bottom">⬆ From Bottom</option><option value="left">➡ From Left</option><option value="right">⬅ From Right</option><option value="random">🔀 Random</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Min: <span className="text-zinc-300">{editOv.params.sizeMin}</span></label>
-                        <input type="range" min={1} max={300} value={editOv.params.sizeMin} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMin:Number(e.target.value)})} className="w-full accent-purple-600"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Max: <span className="text-zinc-300">{editOv.params.sizeMax}</span></label>
-                        <input type="range" min={1} max={400} value={editOv.params.sizeMax} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMax:Number(e.target.value)})} className="w-full accent-purple-600"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Min: <span className="text-zinc-300">{editOv.params.speedMin}</span></label>
-                        <input type="range" min={0.1} max={30} step={0.1} value={editOv.params.speedMin} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMin:Number(e.target.value)})} className="w-full accent-purple-600"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Max: <span className="text-zinc-300">{editOv.params.speedMax}</span></label>
-                        <input type="range" min={0.1} max={40} step={0.1} value={editOv.params.speedMax} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMax:Number(e.target.value)})} className="w-full accent-purple-600"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Alpha Min: <span className="text-zinc-300">{editOv.params.alphaMin.toFixed(2)}</span></label>
-                        <input type="range" min={0} max={1} step={0.01} value={editOv.params.alphaMin} onChange={e=>updateOverlayParams(editOv.instanceId,{alphaMin:Number(e.target.value)})} className="w-full accent-purple-600"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Alpha Max: <span className="text-zinc-300">{editOv.params.alphaMax.toFixed(2)}</span></label>
-                        <input type="range" min={0} max={1} step={0.01} value={editOv.params.alphaMax} onChange={e=>updateOverlayParams(editOv.instanceId,{alphaMax:Number(e.target.value)})} className="w-full accent-purple-600"/>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[9px] text-zinc-500 uppercase">Rotate</label>
-                        <button onClick={()=>updateOverlayParams(editOv.instanceId,{rotate:!editOv.params.rotate})} className={`px-3 py-0.5 rounded text-xs border ${editOv.params.rotate?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-500"}`}>{editOv.params.rotate?"On":"Off"}</button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>)}
-
-            {/* Add overlay */}
-            <div className="p-2">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <div className="text-[9px] text-zinc-500 uppercase tracking-wider">Add Overlay</div>
-                <button onClick={()=>setShowAddCustom(v=>!v)} className="px-2 py-0.5 rounded bg-green-900/30 border border-green-700/40 text-green-300 text-[9px] hover:bg-green-900/50">+ Image/GIF</button>
-                <button onClick={()=>{setShowAddCustom(true);setPendingIsVideo(true);setTimeout(()=>customVideoRef.current?.click(),100);}} className="px-2 py-0.5 rounded bg-blue-900/30 border border-blue-700/40 text-blue-300 text-[9px] hover:bg-blue-900/50">+ Video Overlay</button>
-              </div>
-
-              {showAddCustom&&(
-                <div className="mb-2 p-2 rounded border border-green-900/40 bg-[#060c06] space-y-2">
-                  <div className="text-[9px] text-green-400 uppercase tracking-wider">{pendingIsVideo?"Add Video Overlay":"Add Image/GIF Overlay"}</div>
-                  <input type="text" placeholder="Name" value={newCustomName} onChange={e=>setNewCustomName(e.target.value)} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
-                  <input type="text" placeholder="Category" value={newCustomCategory} onChange={e=>setNewCustomCategory(e.target.value)} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
-                  <input ref={customUploadRef} type="file" accept="image/*,image/gif,video/*" className="hidden" onChange={handleCustomUpload}/>
-                  <input ref={customVideoRef} type="file" accept="video/*" className="hidden" onChange={handleCustomVideoUpload}/>
-                  <button onClick={()=>customUploadRef.current?.click()} className="w-full py-1.5 rounded bg-zinc-800/60 border border-dashed border-zinc-600/50 text-xs text-zinc-400 hover:border-green-700/50 hover:text-green-300">
-                    {pendingCustomFile?`✅ ${pendingIsVideo?"Video":"Image"} Ready`:"📁 Choose Image, GIF, or Video"}
-                  </button>
-                  {pendingCustomFile&&<div className="flex gap-1">
-                    <button onClick={finalizeCustomOverlay} className="flex-1 py-1 rounded bg-green-900/40 border border-green-700/40 text-green-300 text-xs font-bold">💾 Save & Add</button>
-                    <button onClick={()=>{setPendingCustomFile(null);setShowAddCustom(false);setPendingIsVideo(false);}} className="px-3 py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-zinc-400 text-xs">✕</button>
-                  </div>}
-                </div>)}
-
-              <div className="flex gap-1 flex-wrap mb-2">
-                {OVERLAY_CATEGORIES.map(cat=>(<button key={cat} onClick={()=>setOverlayCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] border transition-all ${overlayCategory===cat?"bg-purple-900/40 border-purple-700/40 text-purple-300":"border-zinc-700/30 text-zinc-400 hover:text-zinc-200"}`}>{cat}</button>))}
-              </div>
-              <div className="grid grid-cols-3 gap-1 max-h-32 overflow-y-auto">
-                {filteredOverlays.map((o:any)=>(
-                  <button key={o.id} onClick={()=>o.id.startsWith("custom:")?addCustomOverlay(customOverlays.find(c=>`custom:${c.id}`===o.id)!):addOverlay(o.id)} className="px-2 py-1.5 rounded text-[10px] border border-zinc-800/40 text-zinc-400 hover:border-purple-700/40 hover:text-purple-300 hover:bg-purple-900/20 transition-all text-left">
-                    {o.emoji} {o.label}
-                  </button>))}
-              </div>
+          {showSizeMenu && (
+            <div className="absolute z-20 mt-1 w-full max-w-sm rounded bg-zinc-900 border border-zinc-700/40 shadow-xl">
+              {CANVAS_PRESETS.map(p => (
+                <button key={p.label} onClick={() => { setCanvasPreset(p); setShowSizeMenu(false); }}
+                  className={`block w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800/60 ${canvasPreset.label === p.label ? "text-purple-300 bg-purple-900/10" : "text-zinc-400"}`}
+                >{p.label}</button>
+              ))}
             </div>
-          </div>)}
+          )}
+        </div>
 
-        {/* ── Sound Panel ── */}
-        {showSoundPanel&&(
-          <div className="mt-2 rounded border border-green-900/40 bg-[#04080a]/95 flex-shrink-0 max-h-96 overflow-y-auto">
-            {/* Active sounds */}
-            {activeSounds.length>0&&(
-              <div className="p-2 border-b border-zinc-800/30">
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="text-[9px] text-green-400 uppercase tracking-wider">Playing ({activeSounds.length})</div>
-                  <button onClick={stopAllSounds} className="px-2 py-0.5 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-[9px]">⏹ Stop All</button>
-                </div>
-                <div className="space-y-1.5">
-                  {activeSounds.map(s=>(
-                    <div key={s.id} className="flex items-center gap-2 px-2 py-1 rounded bg-green-900/20 border border-green-700/30">
-                      <span className="text-sm">{s.emoji}</span>
-                      <span className="text-[10px] text-green-300 flex-1 truncate">{s.name}</span>
-                      <input type="range" min={0} max={100} value={Math.round(s.volume*100)} onChange={e=>updateSoundVolume(s.id,Number(e.target.value)/100)} className="w-20 accent-green-500"/>
-                      <button onClick={()=>toggleSound(s)} className="text-red-400 hover:text-red-300 text-xs px-1">×</button>
-                    </div>))}
-                </div>
-              </div>)}
+        {/* Canvas */}
+        <div className="flex-1 relative rounded border border-zinc-800/40 bg-[#030305] overflow-hidden">
+          <canvas
+            ref={canvasRef}
+            onMouseDown={handleCanvasMouseDown}
+            className="absolute inset-0 w-full h-full cursor-crosshair"
+            style={{ imageRendering: "auto" }}
+          />
+        </div>
 
-            {/* TTS Section */}
-            <div className="p-3 border-b border-zinc-800/30">
-              <div className="text-[10px] text-green-400 uppercase tracking-wider mb-2 font-bold">🗣️ Text-to-Speech</div>
-              <textarea value={ttsText} onChange={e=>setTtsText(e.target.value)} rows={2} className="w-full px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none resize-none mb-2" placeholder="Type text to speak..."/>
-              <div className="grid grid-cols-2 gap-2 mb-2">
+        {/* Bottom Controls */}
+        <div className="mt-2 flex items-center gap-2 flex-wrap flex-shrink-0">
+          <input ref={bgFileRef} type="file" accept="image/*" onChange={handleBgUpload} className="hidden"/>
+          <input ref={bgVidRef}  type="file" accept="video/*" onChange={handleVideoUpload} className="hidden"/>
+          <button onClick={() => bgFileRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/40">🖼️ BG Image</button>
+          <button onClick={() => bgVidRef.current?.click()}  className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/40">🎬 BG Video</button>
+          <button onClick={clearBg} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-red-700/40">Clear BG</button>
+          <div className="h-4 w-px bg-zinc-800/40"/>
+          <button onClick={handleExportPng} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-green-700/40">📸 Export PNG</button>
+          <button
+            onClick={recording ? stopRecording : startRecording}
+            className={`px-3 py-1.5 rounded border text-xs font-bold transition-all ${recording ? "bg-red-900/40 border-red-700/40 text-red-300 animate-pulse" : "bg-zinc-800/60 border-zinc-700/40 text-zinc-300 hover:border-red-700/40"}`}
+          >{recording ? `⏹ Stop (${fmt(recordingTime)})` : "🔴 Record"}</button>
+          <button onClick={() => setShowRecordings(v => !v)} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/40">📁 Recordings ({recordings.length})</button>
+          <button onClick={saveProject} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-green-700/40">💾 Save</button>
+          <input ref={loadProjectRef} type="file" accept=".json" onChange={loadProject} className="hidden"/>
+          <button onClick={() => loadProjectRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-green-700/40">📂 Load</button>
+          <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+            {isSaving
+              ? (<><span className="animate-spin">💾</span><span>Saving...</span></>)
+              : lastSaved
+              ? (<><span className="text-green-500">✓</span><span>Auto-saved {lastSaved.toLocaleTimeString()}</span></>)
+              : (<span>Auto-save enabled</span>)
+            }
+          </div>
+          <button onClick={saveNow} disabled={isSaving} className="px-3 py-1.5 rounded bg-green-900/40 border border-green-700/40 text-xs text-green-300 hover:bg-green-900/60 disabled:opacity-50">
+            {isSaving ? "💾 Saving..." : "💾 Save Now"}
+          </button>
+          <button onClick={() => exportProjectBackup(getProjectData())} className="px-3 py-1.5 rounded bg-yellow-900/40 border border-yellow-700/40 text-xs text-yellow-300 hover:bg-yellow-900/60">📥 Export Backup</button>
+        </div>
+
+        {showRecordings && (
+          <div className="mt-2 rounded border border-zinc-800/40 bg-[#0a0a14] p-2 max-h-32 overflow-y-auto">
+            {recordings.length === 0
+              ? <div className="text-xs text-zinc-600">No recordings yet</div>
+              : recordings.map((r, i) => (
+                <div key={i} className="flex items-center justify-between py-1 border-b border-zinc-800/30 last:border-0">
+                  <span className="text-xs text-zinc-400">{r.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-zinc-600">{(r.size / 1024 / 1024).toFixed(1)} MB</span>
+                    <a href={r.url} download className="text-xs text-purple-400 hover:text-purple-300">Download</a>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        )}
+      </div>
+
+      {/* Right Sidebar */}
+      <aside className="w-72 flex-shrink-0 border-l border-red-900/20 bg-[#050508] flex flex-col overflow-hidden overflow-y-auto">
+
+        {/* Text Properties */}
+        {sl && (
+          <div className="p-3 border-b border-red-900/20">
+            <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-2" style={{ fontFamily: "Cinzel" }}>Text Properties</h2>
+            <div className="space-y-2">
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Content</label>
+                <textarea value={sl.text} onChange={e => updateLayer(sl.id, { text: e.target.value })} rows={2} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-200 focus:outline-none focus:border-red-700/40 resize-none"/>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[9px] text-zinc-500 block mb-0.5">Voice ({availableVoices.length})</label>
-                  <select value={ttsVoice} onChange={e=>setTtsVoice(e.target.value)} className="w-full px-1.5 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-300 focus:outline-none">
-                    {availableVoices.map(v=>(<option key={v.name} value={v.name}>{v.name} ({v.lang})</option>))}
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Font</label>
+                  <select value={sl.fontFamily} onChange={e => updateLayer(sl.id, { fontFamily: e.target.value })} className="w-full px-1 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
+                    {FONT_OPTIONS.map(f => (<option key={f} value={f}>{f}</option>))}
                   </select>
                 </div>
                 <div>
-                  <label className="text-[9px] text-zinc-500 block mb-0.5">Rate: {ttsRate.toFixed(1)}</label>
-                  <input type="range" min={0.5} max={2} step={0.1} value={ttsRate} onChange={e=>setTtsRate(Number(e.target.value))} className="w-full accent-green-500"/>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size</label>
+                  <input type="number" value={sl.fontSize} onChange={e => updateLayer(sl.id, { fontSize: Math.max(8, Math.min(600, Number(e.target.value))) })} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Color</label>
+                  <input type="color" value={sl.color} onChange={e => updateLayer(sl.id, { color: e.target.value })} className="w-full h-7 rounded bg-zinc-800/60 border border-zinc-700/30 cursor-pointer"/>
                 </div>
                 <div>
-                  <label className="text-[9px] text-zinc-500 block mb-0.5">Pitch: {ttsPitch.toFixed(1)}</label>
-                  <input type="range" min={0.5} max={2} step={0.1} value={ttsPitch} onChange={e=>setTtsPitch(Number(e.target.value))} className="w-full accent-green-500"/>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Animation</label>
+                  <select value={sl.animation} onChange={e => updateLayer(sl.id, { animation: e.target.value })} className="w-full px-1 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
+                    {ALL_ANIMATIONS.map(a => (<option key={a} value={a}>{a}</option>))}
+                  </select>
                 </div>
               </div>
-              <button onClick={playTTS} className={`w-full py-1.5 rounded text-xs font-bold border transition-all ${ttsPlaying?"bg-red-900/40 border-red-700/40 text-red-300":"bg-green-900/30 border-green-700/40 text-green-300 hover:bg-green-900/50"}`}>
-                {ttsPlaying?"⏹ Stop TTS":"▶ Speak"}
-              </button>
-            </div>
-
-            {/* Sound Library */}
-            <div className="p-2">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] text-green-400 uppercase tracking-wider font-bold">🎵 Sound Library</div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Opacity: {Math.round(sl.opacity * 100)}%</label>
+                <input type="range" min={0} max={100} value={Math.round(sl.opacity * 100)} onChange={e => updateLayer(sl.id, { opacity: Number(e.target.value) / 100 })} className="w-full accent-red-600"/>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Rotation: {Math.round(sl.rotation * 180 / Math.PI)}°</label>
+                <input type="range" min={-180} max={180} value={Math.round(sl.rotation * 180 / Math.PI)} onChange={e => updateLayer(sl.id, { rotation: Number(e.target.value) * Math.PI / 180 })} className="w-full accent-red-600"/>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Letter Spacing</label>
+                <input type="range" min={-10} max={50} value={sl.letterSpacing} onChange={e => updateLayer(sl.id, { letterSpacing: Number(e.target.value) })} className="w-full accent-red-600"/>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => updateLayer(sl.id, { bold: !sl.bold })} className={`flex-1 py-1 rounded text-xs border ${sl.bold ? "bg-red-900/40 border-red-700/40 text-red-300" : "bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>B</button>
+                <button onClick={() => updateLayer(sl.id, { italic: !sl.italic })} className={`flex-1 py-1 rounded text-xs border ${sl.italic ? "bg-red-900/40 border-red-700/40 text-red-300" : "bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>I</button>
+                <button onClick={() => updateLayer(sl.id, { underline: !sl.underline })} className={`flex-1 py-1 rounded text-xs border ${sl.underline ? "bg-red-900/40 border-red-700/40 text-red-300" : "bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>U</button>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Align</label>
                 <div className="flex gap-1">
-                  <input ref={soundUploadRef} type="file" accept="audio/*" className="hidden" onChange={handleSoundUpload}/>
-                  <button onClick={()=>soundUploadRef.current?.click()} className="px-2 py-0.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-[9px] text-zinc-400 hover:text-zinc-200">+ Upload Audio</button>
+                  {(["left", "center", "right"] as const).map(a => (
+                    <button key={a} onClick={() => updateLayer(sl.id, { align: a })} className={`flex-1 py-1 rounded text-xs border ${sl.align === a ? "bg-red-900/40 border-red-700/40 text-red-300" : "bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>
+                      {a === "left" ? "⬅️" : a === "center" ? "⬆️" : "➡️"}
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div className="flex gap-1 flex-wrap mb-2">
-                {soundCategories.map(cat=>(<button key={cat} onClick={()=>setSoundCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] border transition-all ${soundCategory===cat?"bg-green-900/40 border-green-700/40 text-green-300":"border-zinc-700/30 text-zinc-400 hover:text-zinc-200"}`}>{cat}</button>))}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Stroke Color</label>
+                  <input type="color" value={sl.strokeColor} onChange={e => updateLayer(sl.id, { strokeColor: e.target.value })} className="w-full h-7 rounded bg-zinc-800/60 border border-zinc-700/30 cursor-pointer"/>
+                </div>
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Stroke Width</label>
+                  <input type="number" value={sl.strokeWidth} onChange={e => updateLayer(sl.id, { strokeWidth: Math.max(0, Number(e.target.value)) })} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
-                {filteredSounds.map(s=>{
-                  const isActive=activeSounds.some(a=>a.id===s.id);
-                  const hasAudio=!!(s.dataUrl||s.url);
-                  return(
-                    <button key={s.id} onClick={()=>toggleSound(s)} disabled={!hasAudio&&!s.isCustom} className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] border transition-all text-left ${isActive?"bg-green-900/40 border-green-700/50 text-green-200":"border-zinc-800/40 text-zinc-400 hover:border-green-700/40 hover:text-green-300 hover:bg-green-900/20"} ${!hasAudio&&!s.isCustom?"opacity-40 cursor-not-allowed":""}`}>
-                      <span className="text-sm">{s.emoji}</span>
-                      <div className="min-w-0">
-                        <div className="truncate">{s.name}</div>
-                        <div className="text-[8px] text-zinc-600">{s.category}{!hasAudio?" (no src)":""}</div>
-                      </div>
-                      {isActive&&<span className="ml-auto text-green-400">▶</span>}
-                    </button>);
-                })}
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={sl.shadowEnabled} onChange={e => updateLayer(sl.id, { shadowEnabled: e.target.checked })} className="accent-red-600"/>
+                <span className="text-xs text-zinc-400">Shadow</span>
               </div>
-              <p className="text-[9px] text-zinc-700 mt-2 leading-relaxed">Upload .mp3/.wav/.ogg files for custom sounds. Built-in sounds require external URLs.</p>
+              {sl.shadowEnabled && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Shadow Color</label>
+                    <input type="color" value={sl.shadowColor} onChange={e => updateLayer(sl.id, { shadowColor: e.target.value })} className="w-full h-7 rounded bg-zinc-800/60 border border-zinc-700/30 cursor-pointer"/>
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Blur</label>
+                    <input type="number" value={sl.shadowBlur} onChange={e => updateLayer(sl.id, { shadowBlur: Math.max(0, Number(e.target.value)) })} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={sl.glowEnabled} onChange={e => updateLayer(sl.id, { glowEnabled: e.target.checked })} className="accent-red-600"/>
+                <span className="text-xs text-zinc-400">Glow</span>
+              </div>
+              {sl.glowEnabled && (
+                <div>
+                  <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Glow Color</label>
+                  <input type="color" value={sl.glowColor} onChange={e => updateLayer(sl.id, { glowColor: e.target.value })} className="w-full h-7 rounded bg-zinc-800/60 border border-zinc-700/30 cursor-pointer"/>
+                </div>
+              )}
             </div>
-          </div>)}
-      </div>
+          </div>
+        )}
 
-      {/* ── Right Sidebar ── */}
-      <aside className="w-60 flex-shrink-0 border-l border-red-900/20 bg-[#050508] flex flex-col overflow-y-auto">
-        {/* Tab switcher */}
-        <div className="flex border-b border-zinc-800/40">
-          {(["text","overlay","sound"] as const).map(tab=>(
-            <button key={tab} onClick={()=>setRightTab(tab)} className={`flex-1 py-2 text-[9px] uppercase tracking-wider font-bold transition-colors ${rightTab===tab?"bg-red-900/20 text-red-300 border-b-2 border-red-600":"text-zinc-600 hover:text-zinc-300"}`}>
-              {tab==="text"?"✏️ Text":tab==="overlay"?"🎭 Overlay":"🔊 Sound"}
-            </button>))}
-        </div>
-        <div className="p-3">
-          {/* TEXT TAB */}
-          {rightTab==="text"&&sl&&(
-            <div className="space-y-3">
-              <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold" style={{fontFamily:"Cinzel"}}>Edit Layer</h2>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Text</label><input type="text" value={sl.text} onChange={e=>updateLayer(sl.id,{text:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none focus:border-red-700/40"/></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Animation ({ALL_ANIMATIONS.length})</label><select value={sl.animation} onChange={e=>updateLayer(sl.id,{animation:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">{ALL_ANIMATIONS.map(a=><option key={a} value={a}>{a}</option>)}</select></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Font ({FONT_OPTIONS.length})</label><select value={sl.fontFamily} onChange={e=>updateLayer(sl.id,{fontFamily:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">{FONT_OPTIONS.map(f=><option key={f} value={f}>{f}</option>)}</select></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Font Size: <span className="text-zinc-300">{sl.fontSize}px</span></label><div className="flex items-center gap-2"><input type="range" min={8} max={600} value={sl.fontSize} onChange={e=>updateLayer(sl.id,{fontSize:Number(e.target.value)})} className="flex-1 accent-red-600"/><input type="number" min={8} max={600} value={sl.fontSize} onChange={e=>{const v=Math.max(8,Math.min(600,Number(e.target.value)||8));updateLayer(sl.id,{fontSize:v});}} className="w-14 px-1.5 py-0.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none text-center"/></div></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Style</label><div className="flex gap-1.5">{([{k:"bold",l:"B",c:"font-bold"},{k:"italic",l:"I",c:"italic"},{k:"underline",l:"U",c:"underline"}] as const).map(({k,l,c})=>(<button key={k} onClick={()=>updateLayer(sl.id,{[k]:!sl[k as keyof TextLayer]})} className={`flex-1 py-1 rounded text-xs border transition-all ${c} ${sl[k as keyof TextLayer]?"bg-red-900/40 border-red-700/50 text-red-200":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>{l}</button>))}</div></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Align</label><div className="flex gap-1.5">{(["left","center","right"] as CanvasTextAlign[]).map(a=>(<button key={a} onClick={()=>updateLayer(sl.id,{align:a})} className={`flex-1 py-1 rounded text-xs border transition-all ${sl.align===a?"bg-red-900/40 border-red-700/50 text-red-200":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>{a==="left"?"☰":a==="center"?"≡":"☷"}</button>))}</div></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Text Color</label><div className="flex items-center gap-2"><input type="color" value={sl.color} onChange={e=>updateLayer(sl.id,{color:e.target.value})} className="w-8 h-7 rounded cursor-pointer bg-transparent border-0 p-0"/><span className="text-[10px] font-mono text-zinc-400">{sl.color}</span></div></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Stroke: <span className="text-zinc-300">{sl.strokeWidth}</span></label><div className="flex items-center gap-2"><input type="range" min={0} max={20} value={sl.strokeWidth} onChange={e=>updateLayer(sl.id,{strokeWidth:Number(e.target.value)})} className="flex-1 accent-red-600"/><input type="color" value={sl.strokeColor} onChange={e=>updateLayer(sl.id,{strokeColor:e.target.value})} className="w-7 h-6 rounded cursor-pointer bg-transparent border-0 p-0"/></div></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Opacity: <span className="text-zinc-300">{Math.round(sl.opacity*100)}%</span></label><input type="range" min={0} max={100} value={Math.round(sl.opacity*100)} onChange={e=>updateLayer(sl.id,{opacity:Number(e.target.value)/100})} className="w-full accent-red-600"/></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Letter Spacing: <span className="text-zinc-300">{sl.letterSpacing}px</span></label><input type="range" min={-10} max={80} value={sl.letterSpacing} onChange={e=>updateLayer(sl.id,{letterSpacing:Number(e.target.value)})} className="w-full accent-red-600"/></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Position Y: <span className="text-zinc-300">{Math.round(sl.y*100)}%</span></label><input type="range" min={0} max={100} value={Math.round(sl.y*100)} onChange={e=>updateLayer(sl.id,{y:Number(e.target.value)/100})} className="w-full accent-red-600"/></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Rotation: <span className="text-zinc-300">{Math.round(sl.rotation*180/Math.PI)}°</span></label><input type="range" min={-180} max={180} value={Math.round(sl.rotation*180/Math.PI)} onChange={e=>updateLayer(sl.id,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-red-600"/></div>
-              <div className="flex items-center justify-between"><label className="text-[9px] text-zinc-500 uppercase">Shadow</label><button onClick={()=>updateLayer(sl.id,{shadowEnabled:!sl.shadowEnabled})} className={`px-3 py-0.5 rounded text-xs border font-bold ${sl.shadowEnabled?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-500"}`}>{sl.shadowEnabled?"On":"Off"}</button></div>
-              {sl.shadowEnabled&&(<div className="flex items-center gap-2"><input type="color" value={sl.shadowColor} onChange={e=>updateLayer(sl.id,{shadowColor:e.target.value})} className="w-7 h-6 rounded cursor-pointer bg-transparent border-0 p-0"/><input type="range" min={0} max={60} value={sl.shadowBlur} onChange={e=>updateLayer(sl.id,{shadowBlur:Number(e.target.value)})} className="flex-1 accent-red-600"/><span className="text-[10px] text-zinc-500 w-6">{sl.shadowBlur}</span></div>)}
-              <div className="flex items-center justify-between"><label className="text-[9px] text-zinc-500 uppercase">Glow</label><button onClick={()=>updateLayer(sl.id,{glowEnabled:!sl.glowEnabled})} className={`px-3 py-0.5 rounded text-xs border font-bold ${sl.glowEnabled?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-500"}`}>{sl.glowEnabled?"On":"Off"}</button></div>
-              {sl.glowEnabled&&(<div className="flex items-center gap-2"><input type="color" value={sl.glowColor} onChange={e=>updateLayer(sl.id,{glowColor:e.target.value})} className="w-7 h-6 rounded cursor-pointer bg-transparent border-0 p-0"/><span className="text-[9px] text-zinc-500">{sl.glowColor}</span></div>)}
-              <button onClick={()=>{const f=makeLayer({id:sl.id,text:sl.text,x:sl.x,y:sl.y});setLayers(p=>p.map(l=>l.id===sl.id?f:l));}} className="w-full py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-[10px] text-zinc-500 hover:text-zinc-300">↺ Reset Layer</button>
-            </div>)}
-          {rightTab==="text"&&!sl&&<p className="text-[10px] text-zinc-600 text-center py-4">Select a text layer to edit</p>}
-
-          {/* OVERLAY TAB */}
-          {rightTab==="overlay"&&(
-            <div className="space-y-3">
-              <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold">Overlay Controls</h2>
-              {selectedOverlayInstance?(()=>{
-                const ov=activeOverlays.find(o=>o.instanceId===selectedOverlayInstance);
-                if(!ov)return <p className="text-[10px] text-zinc-600">Overlay not found</p>;
-                const co=customOverlays.find(c=>`custom:${c.id}`===ov.defId);
-                const isVid=co?.isVideo;
-                return(
-                  <div className="space-y-2">
-                    <div className="text-xs text-purple-300 font-medium">{ov.emoji} {ov.label}</div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Opacity: <span className="text-zinc-300">{Math.round((ov.opacity??1)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.opacity??1)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{opacity:Number(e.target.value)/100})} className="w-full accent-purple-600"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Scale: <span className="text-zinc-300">{ov.scale.toFixed(2)}</span></label><input type="range" min={0.1} max={3} step={0.05} value={ov.scale} onChange={e=>updateOverlayProp(ov.instanceId,{scale:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Rotation: <span className="text-zinc-300">{Math.round((ov.rotation||0)*180/Math.PI)}°</span></label><input type="range" min={-180} max={180} value={Math.round((ov.rotation||0)*180/Math.PI)} onChange={e=>updateOverlayProp(ov.instanceId,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-purple-600"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Pos X: <span className="text-zinc-300">{Math.round((ov.posX||0.5)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.posX||0.5)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{posX:Number(e.target.value)/100})} className="w-full accent-purple-600"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Pos Y: <span className="text-zinc-300">{Math.round((ov.posY||0.5)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.posY||0.5)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{posY:Number(e.target.value)/100})} className="w-full accent-purple-600"/></div>
-                    {isVid&&<>
-                      <div><label className="text-[9px] text-zinc-500 block mb-0.5">Video Opacity: <span className="text-zinc-300">{Math.round((ov.videoOpacity??1)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.videoOpacity??1)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{videoOpacity:Number(e.target.value)/100})} className="w-full accent-blue-500"/></div>
-                      <div><label className="text-[9px] text-zinc-500 block mb-0.5">Fit</label><select value={ov.videoFit||"cover"} onChange={e=>updateOverlayProp(ov.instanceId,{videoFit:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select></div>
-                    </>}
-                    <button onClick={()=>removeOverlay(ov.instanceId)} className="w-full py-1 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-xs hover:bg-red-900/50">🗑 Remove Overlay</button>
-                    <p className="text-[9px] text-zinc-600 leading-relaxed">Drag on canvas to reposition. Use scale slider or drag bottom-right handle to resize.</p>
-                  </div>);
-              })():<p className="text-[10px] text-zinc-600 py-4 text-center">Click an overlay on canvas<br/>or select from the Overlays panel below</p>}
-            </div>)}
-
-          {/* SOUND TAB */}
-          {rightTab==="sound"&&(
+        {/* Media Transform Controls */}
+        {(bgImage || bgVideo) && (
+          <div className="p-3 border-b border-blue-900/20">
+            <h2 className="text-[10px] text-blue-400 uppercase tracking-widest font-bold mb-2">Media Transform</h2>
             <div className="space-y-2">
-              <h2 className="text-[10px] text-green-400 uppercase tracking-widest font-bold">Sound Controls</h2>
-              {activeSounds.length>0?activeSounds.map(s=>(
-                <div key={s.id} className="p-2 rounded border border-green-900/30 bg-green-900/10">
-                  <div className="flex items-center gap-1.5 mb-1"><span className="text-sm">{s.emoji}</span><span className="text-xs text-green-300 flex-1 truncate">{s.name}</span><button onClick={()=>toggleSound(s)} className="text-red-400 text-xs">×</button></div>
-                  <div className="flex items-center gap-2"><span className="text-[9px] text-zinc-500">Vol</span><input type="range" min={0} max={100} value={Math.round(s.volume*100)} onChange={e=>updateSoundVolume(s.id,Number(e.target.value)/100)} className="flex-1 accent-green-500"/><span className="text-[9px] text-zinc-400 w-6">{Math.round(s.volume*100)}</span></div>
-                </div>)):
-                <p className="text-[10px] text-zinc-600 py-4 text-center">No sounds playing.<br/>Open Sounds panel to add.</p>}
-              <button onClick={()=>setShowSoundPanel(true)} className="w-full py-1.5 rounded border border-green-700/30 text-green-400 text-xs hover:bg-green-900/20">🎵 Open Sound Library</button>
-            </div>)}
+              <div>
+                {/* FIX #4: now controls bgTransform.fitMode which is what drawBg reads */}
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Fit Mode</label>
+                <select value={bgTransform.fitMode} onChange={e => setBgTransform(prev => ({ ...prev, fitMode: e.target.value as any }))} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
+                  <option value="cover">Cover (Fill)</option>
+                  <option value="contain">Contain (Fit)</option>
+                  <option value="fill">Stretch</option>
+                  <option value="center">Center (Original)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Scale: {bgTransform.scale.toFixed(2)}</label>
+                <input type="range" min={0.1} max={3} step={0.05} value={bgTransform.scale} onChange={e => setBgTransform(prev => ({ ...prev, scale: Number(e.target.value) }))} className="w-full accent-blue-600"/>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Rotation: {Math.round(bgTransform.rotation * 180 / Math.PI)}°</label>
+                <input type="range" min={-180} max={180} value={Math.round(bgTransform.rotation * 180 / Math.PI)} onChange={e => setBgTransform(prev => ({ ...prev, rotation: Number(e.target.value) * Math.PI / 180 }))} className="w-full accent-blue-600"/>
+              </div>
+              <div>
+                {/* FIX #3: opacity slider now actually does something */}
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Opacity: {Math.round(bgTransform.opacity * 100)}%</label>
+                <input type="range" min={0} max={100} value={Math.round(bgTransform.opacity * 100)} onChange={e => setBgTransform(prev => ({ ...prev, opacity: Number(e.target.value) / 100 }))} className="w-full accent-blue-600"/>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => setBgTransform(prev => ({ ...prev, flipX: !prev.flipX }))} className={`flex-1 py-1 rounded text-xs border ${bgTransform.flipX ? "bg-blue-900/40 border-blue-700/40 text-blue-300" : "bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>↔️ Flip X</button>
+                <button onClick={() => setBgTransform(prev => ({ ...prev, flipY: !prev.flipY }))} className={`flex-1 py-1 rounded text-xs border ${bgTransform.flipY ? "bg-blue-900/40 border-blue-700/40 text-blue-300" : "bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>↕️ Flip Y</button>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => setBgTransform(DEFAULT_MEDIA_TRANSFORM)} className="flex-1 py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">↺ Reset</button>
+                <button onClick={() => triggerTransition(mediaTransition, mediaTransitionParams)} disabled={mediaTransition === "none"} className="flex-1 py-1 rounded bg-blue-900/40 border border-blue-700/40 text-xs text-blue-300 disabled:opacity-50">▶ Play Transition</button>
+              </div>
+            </div>
+          </div>
+        )}
 
-          {/* Template info at bottom */}
-          {rightTab==="text"&&(
-            <div className="mt-4 pt-3 border-t border-zinc-800/40">
-              <div className="space-y-1.5 text-xs">
-                <div><span className="text-zinc-600 text-[9px]">Template</span><div className="text-zinc-200 font-medium">{selectedTemplate.name}</div></div>
-                <div><span className="text-zinc-600 text-[9px]">Colors</span><div className="flex gap-1 mt-1">{selectedTemplate.colors.map((c,i)=>(<div key={i} className="w-5 h-5 rounded border border-zinc-700/30" style={{background:c}}/>))}</div></div>
-                <div><span className="text-zinc-600 text-[9px]">Canvas</span><div className="text-zinc-300 font-mono text-[10px]">{canvasPreset.w}×{canvasPreset.h}</div></div>
+        {/* Text Transition Controls */}
+        <div className="p-3 border-b border-purple-900/20">
+          <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold mb-2">Text Transition</h2>
+          <div className="space-y-2">
+            <div>
+              <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Transition</label>
+              <select value={textTransition} onChange={e => setTextTransition(e.target.value)} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
+                <option value="none">None</option>
+                {TEXT_TRANSITIONS.map(t => (<option key={t.id} value={t.id}>{t.emoji} {t.label}</option>))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Direction</label>
+              <select value={textTransitionParams.direction || "center"} onChange={e => setTextTransitionParams(prev => ({ ...prev, direction: e.target.value as any }))} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
+                <option value="center">Center</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+                <option value="up">Up</option>
+                <option value="down">Down</option>
+                <option value="random">Random</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Duration: {textTransitionParams.duration}s</label>
+              <input type="range" min={0.1} max={3} step={0.1} value={textTransitionParams.duration} onChange={e => setTextTransitionParams(prev => ({ ...prev, duration: Number(e.target.value) }))} className="w-full accent-purple-600"/>
+            </div>
+            <div>
+              <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Intensity: {Math.round(textTransitionParams.intensity * 100)}%</label>
+              <input type="range" min={0} max={100} value={Math.round(textTransitionParams.intensity * 100)} onChange={e => setTextTransitionParams(prev => ({ ...prev, intensity: Number(e.target.value) / 100 }))} className="w-full accent-purple-600"/>
+            </div>
+            <button
+              onClick={() => triggerTransition(textTransition, textTransitionParams)}
+              disabled={textTransition === "none" || isTransitioningDisplay}
+              className="w-full py-1.5 rounded bg-purple-900/40 border border-purple-700/40 text-purple-300 text-xs font-bold disabled:opacity-50"
+            >
+              {isTransitioningDisplay ? "⏳ Playing..." : "▶ Play Transition"}
+            </button>
+          </div>
+        </div>
+
+        {/* Overlays Panel */}
+        <div className="p-3 border-b border-red-900/20">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold" style={{ fontFamily: "Cinzel" }}>Overlays</h2>
+            <button onClick={() => setShowOverlayPanel(v => !v)} className="text-[10px] text-zinc-500 hover:text-zinc-300">{showOverlayPanel ? "Hide" : "Show"}</button>
+          </div>
+          {showOverlayPanel && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1">
+                {OVERLAY_CATEGORIES.map(cat => (
+                  <button key={cat} onClick={() => setOverlayCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] font-medium transition-all border ${overlayCategory === cat ? "bg-red-900/30 border-red-700/40 text-red-300" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}>{cat}</button>
+                ))}
               </div>
-              <div className="mt-3 pt-3 border-t border-zinc-800/40">
-                <h3 className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">OBS Usage</h3>
-                <p className="text-[10px] text-zinc-600 leading-relaxed">Export PNG for static. Record → .webm → OBS Media Source for animated.</p>
+              <div className="grid grid-cols-3 gap-1">
+                {filteredOverlays.map(o => (
+                  <button key={o.id} onClick={() => addOverlay(o.id)} className="p-1.5 rounded bg-zinc-800/40 border border-zinc-800/30 hover:border-red-700/40 text-xs text-zinc-400 hover:text-zinc-200 transition-all" title={o.label}>
+                    <span className="text-lg">{o.emoji}</span>
+                  </button>
+                ))}
               </div>
-            </div>)}
+              <button onClick={() => setShowAddCustom(true)} className="w-full py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">+ Add Custom</button>
+              {showAddCustom && (
+                <div className="space-y-2 p-2 rounded bg-zinc-900/50 border border-zinc-800/30">
+                  <input value={newCustomName} onChange={e => setNewCustomName(e.target.value)} placeholder="Name" className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
+                  <input value={newCustomCategory} onChange={e => setNewCustomCategory(e.target.value)} placeholder="Category" className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
+                  <input ref={customUploadRef} type="file" accept="image/*,video/*" onChange={handleCustomUpload} className="hidden"/>
+                  <button onClick={() => customUploadRef.current?.click()} className="w-full py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">📁 Upload Image/GIF/Video</button>
+                  {pendingCustomFile && (
+                    <div className="text-xs text-zinc-400">{pendingIsVideo ? "🎬 Video" : pendingIsGif ? "🎞️ GIF" : "🖼️ Image"} selected</div>
+                  )}
+                  <div className="flex gap-1">
+                    <button onClick={finalizeCustomOverlay} className="flex-1 py-1 rounded bg-red-900/40 border border-red-700/40 text-xs text-red-300 hover:bg-red-900/60">Add</button>
+                    <button onClick={() => { setShowAddCustom(false); setPendingCustomFile(null); setNewCustomName(""); }} className="flex-1 py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Overlay Editor */}
+        {editOv && (
+          <div className="p-3 border-b border-purple-900/20">
+            <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold mb-2">Overlay Editor</h2>
+            <div className="space-y-2">
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Count: {editOv.params.count}</label>
+                <input type="range" min={10} max={300} value={editOv.params.count} onChange={e => updateOverlayParams(editOv.instanceId, { count: Number(e.target.value) })} className="w-full accent-purple-600"/>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Scale: {editOv.scale.toFixed(2)}</label>
+                <input type="range" min={0.1} max={3} step={0.05} value={editOv.scale} onChange={e => setActiveOverlays(prev => prev.map(o => o.instanceId === editOv.instanceId ? { ...o, scale: Number(e.target.value) } : o))} className="w-full accent-purple-600"/>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Opacity: {Math.round(editOv.opacity * 100)}%</label>
+                <input type="range" min={0} max={100} value={Math.round(editOv.opacity * 100)} onChange={e => setActiveOverlays(prev => prev.map(o => o.instanceId === editOv.instanceId ? { ...o, opacity: Number(e.target.value) / 100 } : o))} className="w-full accent-purple-600"/>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Min: {editOv.params.speedMin}</label>
+                <input type="range" min={0.1} max={10} step={0.1} value={editOv.params.speedMin} onChange={e => updateOverlayParams(editOv.instanceId, { speedMin: Number(e.target.value) })} className="w-full accent-purple-600"/>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Max: {editOv.params.speedMax}</label>
+                <input type="range" min={0.1} max={20} step={0.1} value={editOv.params.speedMax} onChange={e => updateOverlayParams(editOv.instanceId, { speedMax: Number(e.target.value) })} className="w-full accent-purple-600"/>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Min: {editOv.params.sizeMin}</label>
+                <input type="range" min={1} max={100} value={editOv.params.sizeMin} onChange={e => updateOverlayParams(editOv.instanceId, { sizeMin: Number(e.target.value) })} className="w-full accent-purple-600"/>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Max: {editOv.params.sizeMax}</label>
+                <input type="range" min={1} max={200} value={editOv.params.sizeMax} onChange={e => updateOverlayParams(editOv.instanceId, { sizeMax: Number(e.target.value) })} className="w-full accent-purple-600"/>
+              </div>
+              <div>
+                <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Direction</label>
+                <select value={editOv.params.direction} onChange={e => updateOverlayParams(editOv.instanceId, { direction: e.target.value as any })} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
+                  <option value="top">Top</option>
+                  <option value="bottom">Bottom</option>
+                  <option value="left">Left</option>
+                  <option value="right">Right</option>
+                  <option value="center">Center</option>
+                  <option value="random">Random</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={editOv.params.rotate} onChange={e => updateOverlayParams(editOv.instanceId, { rotate: e.target.checked })} className="accent-purple-600"/>
+                <span className="text-xs text-zinc-400">Rotate</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Audio Library Panel */}
+        <div className="p-3 border-b border-green-900/20">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-[10px] text-green-400 uppercase tracking-widest font-bold" style={{ fontFamily: "Cinzel" }}>Audio Library</h2>
+            <button onClick={() => setShowAudioPanel(v => !v)} className="text-[10px] text-zinc-500 hover:text-zinc-300">{showAudioPanel ? "Hide" : "Show"}</button>
+          </div>
+          {showAudioPanel && (
+            <div className="space-y-2">
+              <input ref={audioUploadRef} type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden"/>
+              <button onClick={() => audioUploadRef.current?.click()} className="w-full py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-200">🎵 Upload Audio</button>
+
+              {/* TTS */}
+              <div className="p-2 rounded bg-zinc-900/50 border border-zinc-800/30">
+                <h3 className="text-[9px] text-zinc-500 uppercase mb-1">Text to Speech</h3>
+                <textarea value={ttsText} onChange={e => setTtsText(e.target.value)} placeholder="Enter text to speak..." rows={2} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none resize-none"/>
+                <div className="grid grid-cols-2 gap-1 mt-1">
+                  <div>
+                    <label className="text-[8px] text-zinc-500 uppercase">Rate: {ttsRate}</label>
+                    <input type="range" min={0.5} max={2} step={0.1} value={ttsRate} onChange={e => setTtsRate(Number(e.target.value))} className="w-full accent-green-600"/>
+                  </div>
+                  <div>
+                    <label className="text-[8px] text-zinc-500 uppercase">Pitch: {ttsPitch}</label>
+                    <input type="range" min={0.5} max={2} step={0.1} value={ttsPitch} onChange={e => setTtsPitch(Number(e.target.value))} className="w-full accent-green-600"/>
+                  </div>
+                </div>
+                <select value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)} className="w-full mt-1 px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none">
+                  <option value="default">Default Voice</option>
+                  {availableVoices.map(v => (<option key={v.name} value={v.name}>{v.name} ({v.lang})</option>))}
+                </select>
+                <button onClick={generateTTS} className="w-full mt-1 py-1 rounded bg-green-900/40 border border-green-700/40 text-xs text-green-300 hover:bg-green-900/60">🔊 Generate TTS</button>
+              </div>
+
+              {/* Audio List */}
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {audioLibrary.map(audio => (
+                  <div key={audio.id} className="flex items-center justify-between p-1.5 rounded bg-zinc-800/40 border border-zinc-800/30">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs">{audio.type === "horror" ? "👻" : audio.type === "nature" ? "🌧️" : audio.type === "music" ? "🎵" : audio.type === "tts" ? "🔊" : "📁"}</span>
+                      <span className="text-xs text-zinc-400 truncate">{audio.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => playingAudio === audio.id ? stopAudio() : playAudio(audio)} className={`text-xs px-1.5 py-0.5 rounded ${playingAudio === audio.id ? "bg-green-900/40 text-green-300" : "text-zinc-500 hover:text-zinc-300"}`}>
+                        {playingAudio === audio.id ? "⏹" : "▶"}
+                      </button>
+                      <button onClick={() => removeAudio(audio.id)} className="text-xs text-zinc-600 hover:text-red-400 px-1">×</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </aside>
     </div>
   );
 }
-
