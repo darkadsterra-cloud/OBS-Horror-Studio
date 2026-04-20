@@ -248,7 +248,26 @@ export default function TextAnimator() {
     speechSynthesis.onvoiceschanged=load;
     return()=>{speechSynthesis.onvoiceschanged=null;};
   },[]);
-
+useEffect(() => {
+  const loadFfmpeg = async () => {
+    try {
+      const { FFmpeg } = await import("https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js" as any);
+      const { toBlobURL } = await import("https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js" as any);
+      const ff = new FFmpeg();
+      const base = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
+      await ff.load({
+        coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
+        wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
+      });
+      ffmpegRef.current = ff;
+      setFfmpegLoaded(true);
+    } catch (e) {
+      console.warn("FFmpeg load failed:", e);
+    }
+  };
+  loadFfmpeg();
+}, []);
+  
   const playTTS=()=>{
     if(ttsPlaying){speechSynthesis.cancel();setTtsPlaying(false);return;}
     const utt=new SpeechSynthesisUtterance(ttsText);
@@ -305,14 +324,17 @@ export default function TextAnimator() {
   // ── Recording ──────────────────────────────────────────────────────────────
   const [recording,setRecording]     = useState(false);
   const [recordingTime,setRecordingTime] = useState(0);
-  const [recordings,setRecordings]   = useState<Array<{name:string;url:string;size:number}>>([]);
+  const [recordings, setRecordings] = useState<Array<{name:string;url:string;size:number;webmBlob?:Blob}>>([]);
   const [showRecordings,setShowRecordings] = useState(false);
+  const [convertingMp4, setConvertingMp4] = useState(false);
+  const [mp4Progress, setMp4Progress]     = useState(0);
+  const [ffmpegLoaded, setFfmpegLoaded]   = useState(false);
+  const ffmpegRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
   const chunksRef        = useRef<Blob[]>([]);
   const recTimerRef      = useRef<ReturnType<typeof setInterval>|null>(null);
   const audioCtxRef      = useRef<AudioContext|null>(null);
   const audioDestRef     = useRef<MediaStreamAudioDestinationNode|null>(null);
-  const audioSourceRef   = useRef<MediaElementAudioSourceNode|null>(null);
 
   // ── Canvas / Render ────────────────────────────────────────────────────────
   const canvasRef    = useRef<HTMLCanvasElement>(null);
@@ -813,32 +835,128 @@ export default function TextAnimator() {
   const handleExportPng=()=>{const cv=canvasRef.current;if(!cv)return;const a=document.createElement("a");a.href=cv.toDataURL("image/png");a.download=`horror-overlay-${canvasPreset.w}x${canvasPreset.h}.png`;a.click();};
 
   // Recording
-  const startRecording=()=>{
-    const cv=canvasRef.current;if(!cv)return;chunksRef.current=[];setRecordingTime(0);
-    const videoStream=cv.captureStream(30);let finalStream=videoStream;
-    const vid=bgVideoRef.current;
-    if(vid&&!vid.muted){
-      try{
-        if(!audioCtxRef.current)audioCtxRef.current=new AudioContext();
-        const actx=audioCtxRef.current;
-        if(!audioDestRef.current)audioDestRef.current=actx.createMediaStreamDestination();
-        if(audioSourceRef.current){try{audioSourceRef.current.disconnect();}catch{}}
-        audioSourceRef.current=actx.createMediaElementSource(vid);audioSourceRef.current.connect(audioDestRef.current);audioSourceRef.current.connect(actx.destination);
-        finalStream=new MediaStream([...videoStream.getVideoTracks(),...audioDestRef.current.stream.getAudioTracks()]);
-      }catch(err){console.warn("Audio capture failed:",err);}
+ const startRecording = async () => {
+  const cv = canvasRef.current; if (!cv) return;
+  chunksRef.current = []; setRecordingTime(0);
+
+  const videoStream = cv.captureStream(60);
+  let finalStream: MediaStream = videoStream;
+
+  try {
+    if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+      audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
     }
-    const mimeType=MediaRecorder.isTypeSupported("video/webm;codecs=vp9")?"video/webm;codecs=vp9":MediaRecorder.isTypeSupported("video/webm;codecs=vp8")?"video/webm;codecs=vp8":"video/webm";
-    const mr=new MediaRecorder(finalStream,{mimeType,videoBitsPerSecond:8_000_000});
-    mr.ondataavailable=ev=>{if(ev.data.size>0)chunksRef.current.push(ev.data);};
-    mr.onstop=()=>{const blob=new Blob(chunksRef.current,{type:mimeType});const url=URL.createObjectURL(blob);const name=`rec-${Date.now()}.webm`;setRecordings(prev=>[{name,url,size:blob.size},...prev]);const a=document.createElement("a");a.href=url;a.download=name;a.click();};
-    setTimeout(()=>{mr.start(250);mediaRecorderRef.current=mr;setRecording(true);let el=0;recTimerRef.current=setInterval(()=>{el++;setRecordingTime(el);if(el>=5*60)stopRecording();},1000);},400);
+    const actx = audioCtxRef.current;
+    if (actx.state === "suspended") await actx.resume();
+    if (!audioDestRef.current) {
+      audioDestRef.current = actx.createMediaStreamDestination();
+    }
+    const dest = audioDestRef.current;
+
+    const vid = bgVideoRef.current;
+    if (vid && !vid.muted && vid.readyState >= 2) {
+      try {
+        if (!(vid as any)._srcNode) {
+          (vid as any)._srcNode = actx.createMediaElementSource(vid);
+        }
+        (vid as any)._srcNode.connect(dest);
+        (vid as any)._srcNode.connect(actx.destination);
+      } catch (e) { console.warn("BG video audio:", e); }
+    }
+
+    Object.entries(audioElsRef.current).forEach(([id, audio]) => {
+      try {
+        if (!(audio as any)._srcNode) {
+          (audio as any)._srcNode = actx.createMediaElementSource(audio);
+        }
+        (audio as any)._srcNode.connect(dest);
+        (audio as any)._srcNode.connect(actx.destination);
+      } catch (e) { console.warn(`Sound ${id}:`, e); }
+    });
+
+    if (dest.stream.getAudioTracks().length > 0) {
+      finalStream = new MediaStream([
+        ...videoStream.getVideoTracks(),
+        ...dest.stream.getAudioTracks(),
+      ]);
+    }
+  } catch (err) {
+    console.warn("Audio setup failed, video only:", err);
+  }
+
+  const codecCandidates = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8,opus",
+    "video/webm;codecs=vp8",
+    "video/webm",
+  ];
+  const mimeType = codecCandidates.find(c => MediaRecorder.isTypeSupported(c)) ?? "video/webm";
+
+  const mr = new MediaRecorder(finalStream, {
+    mimeType,
+    videoBitsPerSecond: 20_000_000,
+    audioBitsPerSecond: 320_000,
+  });
+
+  mr.ondataavailable = ev => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
+
+  mr.onstop = () => {
+    const blob = new Blob(chunksRef.current, { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const name = `rec-${Date.now()}.webm`;
+    setRecordings(prev => [{ name, url, size: blob.size, webmBlob: blob }, ...prev]);
+    const a = document.createElement("a"); a.href = url; a.download = name; a.click();
   };
+
+  setTimeout(() => {
+    mr.start(100);
+    mediaRecorderRef.current = mr;
+    setRecording(true);
+    let el = 0;
+    recTimerRef.current = setInterval(() => {
+      el++; setRecordingTime(el);
+      if (el >= 5 * 60) stopRecording();
+    }, 1000);
+  }, 300);
+};
   const stopRecording=()=>{
     if(recTimerRef.current){clearInterval(recTimerRef.current);recTimerRef.current=null;}
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=="inactive"){mediaRecorderRef.current.requestData?.();setTimeout(()=>{if(mediaRecorderRef.current?.state!=="inactive")mediaRecorderRef.current?.stop();},200);}
     setRecording(false);
   };
-
+  
+const convertToMp4 = async (webmBlob: Blob, recName: string) => {
+  if (!ffmpegRef.current) {
+    alert("FFmpeg load ho raha hai, thoda wait karo..."); return;
+  }
+  setConvertingMp4(true); setMp4Progress(0);
+  try {
+    const ff = ffmpegRef.current;
+    ff.on("progress", ({ progress }: any) => setMp4Progress(Math.round(progress * 100)));
+    const data = new Uint8Array(await webmBlob.arrayBuffer());
+    await ff.writeFile("input.webm", data);
+    await ff.exec([
+      "-i", "input.webm",
+      "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+      "-c:a", "aac", "-b:a", "320k",
+      "-movflags", "+faststart", "-pix_fmt", "yuv420p",
+      "output.mp4"
+    ]);
+    const out = await ff.readFile("output.mp4");
+    const mp4Blob = new Blob([out.buffer], { type: "video/mp4" });
+    const mp4Url = URL.createObjectURL(mp4Blob);
+    const a = document.createElement("a");
+    a.href = mp4Url; a.download = recName.replace(".webm", ".mp4"); a.click();
+    await ff.deleteFile("input.webm"); await ff.deleteFile("output.mp4");
+  } catch (err) {
+    console.error("MP4 conversion failed:", err);
+    alert("MP4 conversion fail hui. WebM file download karo.");
+  } finally {
+    setConvertingMp4(false); setMp4Progress(0);
+  }
+};
+  
   const handleSurprise=()=>selectTemplate(allTemplates[Math.floor(Math.random()*allTemplates.length)]);
   const categories=["All",...TEMPLATE_CATEGORIES];
   const editOv=activeOverlays.find(o=>o.instanceId===editingOverlay)||null;
@@ -930,9 +1048,49 @@ export default function TextAnimator() {
         </div>
 
         {/* Recordings */}
-        {showRecordings&&(<div className="mt-2 rounded border border-zinc-800/40 bg-[#06060c] max-h-36 overflow-y-auto flex-shrink-0">
-          {recordings.length===0?<p className="text-xs text-zinc-600 p-3 text-center">No recordings yet</p>:recordings.map((rec,i)=>(<div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/30"><div className="flex-1 min-w-0"><div className="text-xs text-zinc-300 truncate">{rec.name}</div><div className="text-[9px] text-zinc-600">{(rec.size/1024/1024).toFixed(2)} MB</div></div><a href={rec.url} download={rec.name} className="px-2 py-0.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-400 hover:text-white">↓</a></div>))}
-        </div>)}
+        {showRecordings && (
+  <div className="mt-2 rounded border border-zinc-800/40 bg-[#06060c] max-h-48 overflow-y-auto flex-shrink-0">
+    {convertingMp4 && (
+      <div className="px-3 py-2 border-b border-zinc-800/30 bg-blue-900/20">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"/>
+          <span className="text-xs text-blue-300 font-mono">MP4 ban rahi hai... {mp4Progress}%</span>
+        </div>
+        <div className="w-full bg-zinc-800 rounded-full h-1.5">
+          <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{width:`${mp4Progress}%`}}/>
+        </div>
+      </div>
+    )}
+    {recordings.length === 0
+      ? <p className="text-xs text-zinc-600 p-3 text-center">No recordings yet</p>
+      : recordings.map((rec, i) => (
+          <div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/30">
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-zinc-300 truncate">{rec.name}</div>
+              <div className="text-[9px] text-zinc-600">{(rec.size/1024/1024).toFixed(2)} MB</div>
+            </div>
+            <a href={rec.url} download={rec.name}
+              className="px-2 py-0.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-400 hover:text-white">
+              ↓ WebM
+            </a>
+            {rec.webmBlob && (
+              <button
+                onClick={() => convertToMp4(rec.webmBlob!, rec.name)}
+                disabled={convertingMp4}
+                className="px-2 py-0.5 rounded bg-blue-900/40 border border-blue-700/40 text-[10px] text-blue-300 hover:bg-blue-900/60 disabled:opacity-40 disabled:cursor-not-allowed">
+                🎬 MP4
+              </button>
+            )}
+          </div>
+        ))
+    }
+    {!ffmpegLoaded && (
+      <p className="text-[9px] text-zinc-600 px-3 py-1.5 text-center border-t border-zinc-800/30">
+        ⏳ MP4 converter load ho raha hai...
+      </p>
+    )}
+  </div>
+)}
 
         {/* ── Overlay Panel ── */}
         {showOverlayPanel&&(
