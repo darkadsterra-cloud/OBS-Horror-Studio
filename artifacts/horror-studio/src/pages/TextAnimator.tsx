@@ -1,5 +1,3 @@
-// Paste from line 1 to end - COMPLETE FILE
-
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useListTemplates } from "@workspace/api-client-react";
 import { PRESET_TEMPLATES, TEMPLATE_CATEGORIES, type TemplateData } from "@/data/templates";
@@ -17,26 +15,16 @@ const CANVAS_PRESETS = [
   { label:"[Twitch] 1920×1080",                    w:1920, h:1080 },
   { label:"[OBS] 1920×1080 — OBS Canvas",          w:1920, h:1080 },
   { label:"[TikTok] 1080×1920 — TikTok Vertical",  w:1080, h:1920 },
-  { label:"[TikTok] 1920×1080 — TikTok Landscape", w:1920, h:1080 },
   { label:"[Square] 1080×1080 — Square",            w:1080, h:1080 },
-  { label:"[Vertical] 1080×1920 — Vertical 9:16",  w:1080, h:1920 },
-  { label:"[Shorts] 1080×1920 — YouTube Shorts",   w:1080, h:1920 },
-  { label:"[Reel] 1080×1920 — Instagram Reel",     w:1080, h:1920 },
 ];
 
 const ALL_ANIMATIONS = [
-  "none","fade-in","fade-out","zoom-in","zoom-out","zoom-pulse",
-  "slide-left","slide-right","slide-up","slide-down",
-  "bounce","drop-in","elastic","swing","pendulum","rubber-band",
-  "spin","spin-reveal","flip-x","flip-y","roll-in",
-  "glitch","blood-drip","flicker","static","possessed","demonic","shadow-pulse",
-  "cursed","void","hellfire","phantom","decay",
-  "neon-pulse","fire-glow","rainbow","color-cycle","ice-glow","gold-shine",
-  "toxic-glow","plasma","hologram","disco","lava-glow","chroma","aurora",
-  "cinematic-fade","typewriter","dramatic-zoom","split-reveal","curtain",
-  "matrix","scan-line","hack","terminal","pixel-reveal","binary","circuit","laser",
-  "float","wobble","jello","heartbeat","tada","wiggle","flash","breathe","levitate",
-  "shake","jack-in-box","back-in-up","back-in-down",
+  "none","fade-in","fade-out","zoom-in","zoom-out","zoom-pulse","slide-left","slide-right","slide-up","slide-down",
+  "bounce","drop-in","elastic","swing","pendulum","rubber-band","spin","spin-reveal","flip-x","flip-y","roll-in",
+  "glitch","blood-drip","flicker","static","possessed","demonic","shadow-pulse","cursed","void","hellfire","phantom","decay",
+  "neon-pulse","fire-glow","rainbow","color-cycle","ice-glow","gold-shine","toxic-glow","plasma","hologram","disco","lava-glow","chroma","aurora",
+  "cinematic-fade","typewriter","dramatic-zoom","split-reveal","curtain","matrix","scan-line","hack","terminal","pixel-reveal","binary","circuit","laser",
+  "float","wobble","jello","heartbeat","tada","wiggle","flash","breathe","levitate","shake","jack-in-box","back-in-up","back-in-down",
 ];
 
 const FONT_OPTIONS = [
@@ -49,23 +37,14 @@ const FONT_OPTIONS = [
   "Bebas Neue","Anton","Black Han Sans","Oswald","Teko","Barlow Condensed",
   "Squada One","Righteous","Boogaloo","Bangers","Bungee","Bungee Shade","Lilita One",
   "Pacifico","Lobster","Permanent Marker","Caveat","Sacramento","Dancing Script",
-  "Great Vibes","Kaushan Script","Cookie",
-  "Inter","Poppins","Nunito","Montserrat","Raleway","Ubuntu","Lato","Open Sans",
-  "Roboto Condensed","Barlow","Karla","DM Sans","Manrope",
+  "Great Vibes","Kaushan Script","Cookie","Inter","Poppins","Nunito","Montserrat","Raleway",
+  "Ubuntu","Lato","Open Sans","Roboto Condensed","Barlow","Karla","DM Sans","Manrope",
   "Courier New","IBM Plex Mono","Fira Code","Space Mono","Roboto Mono","Inconsolata",
   "Impact","Arial Black","Georgia","Verdana","Tahoma","Trebuchet MS",
 ];
 
 interface SoundTrack {
-  id: string;
-  name: string;
-  category: string;
-  emoji: string;
-  url?: string;
-  dataUrl?: string;
-  isCustom?: boolean;
-  volume: number;
-  loop: boolean;
+  id: string;name: string;category: string;emoji: string;url?: string;dataUrl?: string;isCustom?: boolean;volume: number;loop: boolean;
 }
 
 const BUILTIN_SOUNDS: Omit<SoundTrack,"volume"|"loop">[] = [
@@ -108,29 +87,11 @@ function makeLayer(p:Partial<TextLayer>={}):TextLayer {
 }
 
 interface ActiveOverlay {
-  instanceId: string;
-  defId: string;
-  label: string;
-  emoji: string;
-  params: OverlayParams;
-  posX: number;
-  posY: number;
-  scale: number;
-  rotation: number;
-  opacity: number;
-  videoOpacity?: number;
-  videoFit?: "cover"|"contain"|"fill";
-  videoLoop?: boolean;
-  videoMuted?: boolean;
+  instanceId: string;defId: string;label: string;emoji: string;params: OverlayParams;posX: number;posY: number;scale: number;rotation: number;opacity: number;videoOpacity?: number;videoFit?: "cover"|"contain"|"fill";videoLoop?: boolean;videoMuted?: boolean;
 }
 
 interface ProjectState {
-  version: number;
-  canvasPreset: { w:number; h:number; label:string };
-  layers: Omit<TextLayer, "_w"|"_h">[];
-  activeOverlays: ActiveOverlay[];
-  customOverlays: CustomOverlay[];
-  bgColor: string;
+  version: number;canvasPreset: { w:number; h:number; label:string };layers: Omit<TextLayer, "_w"|"_h">[];activeOverlays: ActiveOverlay[];customOverlays: CustomOverlay[];bgColor: string;
 }
 
 function TemplatePreview({ template, text }:{ template:TemplateData; text:string }) {
@@ -178,6 +139,7 @@ export default function TextAnimator() {
   const [searchQuery,setSearchQuery]           = useState("");
   const [canvasPreset,setCanvasPreset]         = useState(CANVAS_PRESETS[0]);
   const [showSizeMenu,setShowSizeMenu]         = useState(false);
+  const [showTemplates,setShowTemplates]       = useState(true);
 
   const [bgImage,setBgImage]     = useState<HTMLImageElement|null>(null);
   const [bgVideo,setBgVideo]     = useState<HTMLVideoElement|null>(null);
@@ -193,11 +155,8 @@ export default function TextAnimator() {
     setLayers(prev=>prev.map(l=>l.id===id?{...l,...patch}:l));
   },[]);
 
-  const [rightTab, setRightTab] = useState<"text"|"overlay"|"sound">("text");
-
   const [activeOverlays,setActiveOverlays]         = useState<ActiveOverlay[]>([]);
   const [selectedOverlayInstances,setSelectedOverlayInstances] = useState<Set<string>>(new Set());
-  const [showOverlayPanel,setShowOverlayPanel]     = useState(false);
   const [overlayCategory,setOverlayCategory]       = useState("All");
   const [editingOverlay,setEditingOverlay]         = useState<string|null>(null);
   const [customOverlays,setCustomOverlays]         = useState<CustomOverlay[]>([]);
@@ -219,7 +178,35 @@ export default function TextAnimator() {
   const [ttsPlaying, setTtsPlaying]             = useState(false);
   const soundUploadRef   = useRef<HTMLInputElement>(null);
   const audioElsRef      = useRef<Record<string, HTMLAudioElement>>({});
-  const [showSoundPanel, setShowSoundPanel]     = useState(false);
+
+  const [bottomTab, setBottomTab] = useState<"templates"|"overlays"|"sounds"|"recordings">("templates");
+  const [recording,setRecording]     = useState(false);
+  const [recordingTime,setRecordingTime] = useState(0);
+  const [recordings,setRecordings]   = useState<Array<{name:string;url:string;size:number}>>([]);
+  const mediaRecorderRef = useRef<MediaRecorder|null>(null);
+  const chunksRef        = useRef<Blob[]>([]);
+  const recTimerRef      = useRef<ReturnType<typeof setInterval>|null>(null);
+  const audioCtxRef      = useRef<AudioContext|null>(null);
+  const audioDestRef     = useRef<MediaStreamAudioDestinationNode|null>(null);
+  const audioSourceRef   = useRef<MediaElementAudioSourceNode|null>(null);
+
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const animFrameRef = useRef<number>(0);
+  const layersRef    = useRef(layers);
+  useEffect(()=>{layersRef.current=layers;},[layers]);
+  const selectedIdRef = useRef(selectedLayerId);
+  useEffect(()=>{selectedIdRef.current=selectedLayerId;},[selectedLayerId]);
+  const activeOverlaysRef = useRef(activeOverlays);
+  useEffect(()=>{activeOverlaysRef.current=activeOverlays;},[activeOverlays]);
+  const selectedOverlaysRef = useRef(selectedOverlayInstances);
+  useEffect(()=>{selectedOverlaysRef.current=selectedOverlayInstances;},[selectedOverlayInstances]);
+  const customOverlaysRef = useRef(customOverlays);
+  useEffect(()=>{customOverlaysRef.current=customOverlays;},[customOverlays]);
+  const bgImageRef = useRef(bgImage); useEffect(()=>{bgImageRef.current=bgImage;},[bgImage]);
+  const bgVideoRef = useRef(bgVideo); useEffect(()=>{bgVideoRef.current=bgVideo;},[bgVideo]);
+  const bgFitRef   = useRef(bgObjectFit); useEffect(()=>{bgFitRef.current=bgObjectFit;},[bgObjectFit]);
+  const presetRef  = useRef(canvasPreset); useEffect(()=>{presetRef.current=canvasPreset;},[canvasPreset]);
+  const templateRef= useRef(selectedTemplate); useEffect(()=>{templateRef.current=selectedTemplate;},[selectedTemplate]);
 
   useEffect(()=>{
     const load=()=>{
@@ -278,35 +265,6 @@ export default function TextAnimator() {
   const allSoundTracks: SoundTrack[] = [...BUILTIN_SOUNDS.map(s=>({...s,volume:0.7,loop:true})),...customSounds];
   const soundCategories=["All","Horror","Nature","Gaming","Music","Custom"];
   const filteredSounds=allSoundTracks.filter(s=>soundCategory==="All"||s.category===soundCategory);
-
-  const [recording,setRecording]     = useState(false);
-  const [recordingTime,setRecordingTime] = useState(0);
-  const [recordings,setRecordings]   = useState<Array<{name:string;url:string;size:number}>>([]);
-  const [showRecordings,setShowRecordings] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder|null>(null);
-  const chunksRef        = useRef<Blob[]>([]);
-  const recTimerRef      = useRef<ReturnType<typeof setInterval>|null>(null);
-  const audioCtxRef      = useRef<AudioContext|null>(null);
-  const audioDestRef     = useRef<MediaStreamAudioDestinationNode|null>(null);
-  const audioSourceRef   = useRef<MediaElementAudioSourceNode|null>(null);
-
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
-  const animFrameRef = useRef<number>(0);
-  const layersRef    = useRef(layers);
-  useEffect(()=>{layersRef.current=layers;},[layers]);
-  const selectedIdRef = useRef(selectedLayerId);
-  useEffect(()=>{selectedIdRef.current=selectedLayerId;},[selectedLayerId]);
-  const activeOverlaysRef = useRef(activeOverlays);
-  useEffect(()=>{activeOverlaysRef.current=activeOverlays;},[activeOverlays]);
-  const selectedOverlaysRef = useRef(selectedOverlayInstances);
-  useEffect(()=>{selectedOverlaysRef.current=selectedOverlayInstances;},[selectedOverlayInstances]);
-  const customOverlaysRef = useRef(customOverlays);
-  useEffect(()=>{customOverlaysRef.current=customOverlays;},[customOverlays]);
-  const bgImageRef = useRef(bgImage); useEffect(()=>{bgImageRef.current=bgImage;},[bgImage]);
-  const bgVideoRef = useRef(bgVideo); useEffect(()=>{bgVideoRef.current=bgVideo;},[bgVideo]);
-  const bgFitRef   = useRef(bgObjectFit); useEffect(()=>{bgFitRef.current=bgObjectFit;},[bgObjectFit]);
-  const presetRef  = useRef(canvasPreset); useEffect(()=>{presetRef.current=canvasPreset;},[canvasPreset]);
-  const templateRef= useRef(selectedTemplate); useEffect(()=>{templateRef.current=selectedTemplate;},[selectedTemplate]);
 
   const {data:dbTemplates=[]} = useListTemplates();
   const allTemplates:TemplateData[] = [
@@ -435,32 +393,6 @@ export default function TextAnimator() {
     setCustomOverlays(prev=>[...prev,co]);
     setPendingCustomFile(null);setNewCustomName("");setShowAddCustom(false);setPendingIsVideo(false);
     addCustomOverlay(co);
-  };
-
-  const saveProjectAsWebM = async () => {
-    if(!canvasRef.current) return;
-    
-    // Export current canvas as animation webm
-    const canvas = canvasRef.current;
-    const stream = canvas.captureStream(30);
-    
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm";
-    const chunks: Blob[] = [];
-    
-    const mr = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 25000000, audioBitsPerSecond: 256000 });
-    mr.ondataavailable = (e) => { if(e.data.size > 0) chunks.push(e.data); };
-    mr.onstop = () => {
-      const blob = new Blob(chunks, { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `horror-overlay-${canvasPreset.w}x${canvasPreset.h}-${Date.now()}.webm`;
-      a.click();
-      URL.revokeObjectURL(url);
-    };
-    
-    mr.start();
-    setTimeout(() => mr.stop(), 3000); // 3 second preview
   };
 
   const saveProject = () => {
@@ -655,7 +587,6 @@ export default function TextAnimator() {
           }
           def.draw(ctx,W,H,t,ps,ov.params);
         }
-        // Draw selection borders for MULTIPLE selected overlays
         if(selectedOverlaysRef.current.has(ov.instanceId)){
           ctx.setTransform(1,0,0,1,0,0);
           const color = selectedOverlaysRef.current.size > 1 ? "rgba(100,255,150,0.8)" : "rgba(150,100,255,0.9)";
@@ -688,11 +619,9 @@ export default function TextAnimator() {
     const {x,y}=toCanvas(e);const W=canvasPreset.w,H=canvasPreset.h;
     const isCtrlKey = (e as any).ctrlKey || (e as any).metaKey;
     
-    // Hit test overlays FIRST
     const hitO=[...activeOverlaysRef.current].reverse().find(o=>hitTestOverlay(o,x,y,W,H));
     if(hitO){
       if(isCtrlKey){
-        // Multi-select: Toggle overlay
         setSelectedOverlayInstances(prev => {
           const newSet = new Set(prev);
           if(newSet.has(hitO.instanceId)) newSet.delete(hitO.instanceId);
@@ -700,7 +629,6 @@ export default function TextAnimator() {
           return newSet;
         });
       } else {
-        // Single select
         setSelectedOverlayInstances(new Set([hitO.instanceId]));
         setEditingOverlay(hitO.instanceId);
       }
@@ -710,7 +638,6 @@ export default function TextAnimator() {
       return;
     }
 
-    // Then text layers
     const hitL=[...layersRef.current].reverse().find(l=>hitTestLayer(l,x,y,W,H));
     if(hitL){
       setSelectedLayerId(hitL.id);setSelectedOverlayInstances(new Set());
@@ -732,7 +659,6 @@ export default function TextAnimator() {
         updateLayer(dragId.current,{fontSize:Math.round(ns)});
       } else if(ovDragging.current&&ovDragId.current){
         const dx=x-ovDragStartMouse.current.x,dy=y-ovDragStartMouse.current.y;
-        // Move ALL selected overlays together
         selectedOverlaysRef.current.forEach(instanceId => {
           const ov = activeOverlaysRef.current.find(o => o.instanceId === instanceId);
           if(ov) {
@@ -742,13 +668,11 @@ export default function TextAnimator() {
       } else if(ovResizing.current&&ovDragId.current){
         const dy=y-ovResizeStartY.current;
         const ns=Math.max(0.1,Math.min(5,ovResizeStartScale.current+dy*0.005));
-        // Resize ALL selected overlays
         selectedOverlaysRef.current.forEach(instanceId => {
           updateOverlayProp(instanceId,{scale:ns});
         });
       } else if(ovRotating.current&&ovDragId.current){
         const angle=Math.atan2(y-ovRotateCenter.current.y,x-ovRotateCenter.current.x);
-        // Rotate ALL selected overlays
         selectedOverlaysRef.current.forEach(instanceId => {
           const ov = activeOverlaysRef.current.find(o => o.instanceId === instanceId);
           if(ov) {
@@ -767,7 +691,6 @@ export default function TextAnimator() {
 
   const handleExportPng=()=>{const cv=canvasRef.current;if(!cv)return;const a=document.createElement("a");a.href=cv.toDataURL("image/png");a.download=`horror-overlay-${canvasPreset.w}x${canvasPreset.h}-${Date.now()}.png`;a.click();};
 
-  // RECORDING WITH OVERLAYS DURING CAPTURE
   const startRecording=()=>{
     const cv=canvasRef.current;if(!cv)return;chunksRef.current=[];setRecordingTime(0);
     const videoStream=cv.captureStream(60);
@@ -816,167 +739,163 @@ export default function TextAnimator() {
   ];
 
   return (
-    <div className="h-full flex overflow-hidden text-zinc-300">
-      <aside className="w-64 flex-shrink-0 border-r border-red-900/20 bg-[#050508] flex flex-col overflow-hidden">
-        <div className="p-3 border-b border-red-900/20">
-          <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-2" style={{fontFamily:"Cinzel"}}>Text Input</h2>
-          <textarea value={newText} onChange={e=>setNewText(e.target.value)} rows={2} className="w-full px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-red-700/40"/>
-          <button onClick={()=>{const l=makeLayer({text:newText||"TEXT",fontFamily:FONT_OPTIONS[0],color:selectedTemplate.colors[0]});setLayers(p=>[...p,l]);setSelectedLayerId(l.id);}} className="w-full mt-1.5 py-1.5 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-xs font-bold hover:bg-red-900/50 transition-colors">+ Add Text Layer</button>
-          <button onClick={handleSurprise} className="w-full mt-1.5 py-1.5 rounded bg-purple-900/20 border border-purple-700/30 text-purple-300 text-xs font-bold hover:bg-purple-900/40 transition-colors">🎲 Surprise Me</button>
-        </div>
-        <div className="p-2 border-b border-red-900/20">
-          <h2 className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1.5">Text Layers</h2>
-          <div className="space-y-1 max-h-28 overflow-y-auto">
-            {layers.map(l=>(
-              <div key={l.id} onClick={()=>{setSelectedLayerId(l.id);setSelectedOverlayInstances(new Set());setRightTab("text");}} className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs transition-all border ${selectedLayerId===l.id?"border-red-700/40 bg-red-900/20 text-red-300":"border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5"}`}>
-                <span className="flex-1 truncate">{l.text||"(empty)"}</span>
-                <button onClick={e=>{e.stopPropagation();setLayers(p=>p.filter(x=>x.id!==l.id));if(selectedLayerId===l.id)setSelectedLayerId(null);}} className="text-zinc-600 hover:text-red-400 text-[9px]">×</button>
-              </div>))}
-          </div>
-        </div>
-        <div className="p-2 border-b border-red-900/20">
-          <div className="flex flex-wrap gap-1">
-            {categories.map(cat=>(<button key={cat} onClick={()=>setActiveCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] font-medium transition-all border ${activeCategory===cat?"bg-red-900/20 border-red-700/40 text-red-300":"border-zinc-800/40 text-zinc-600 hover:text-zinc-300"}`}>{cat}</button>))}
-          </div>
-        </div>
-        <div className="p-2 border-b border-zinc-800/30">
-          <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search templates..." className="w-full px-2 py-1 rounded bg-zinc-800/50 border border-zinc-700/30 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-red-700/40"/>
-        </div>
-        <div className="flex-1 overflow-y-auto p-2">
-          <div className="text-[9px] text-zinc-600 mb-1.5 uppercase tracking-wider">{filtered.length} templates</div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {filtered.map(tpl=>(<TemplateCard key={tpl.id} template={tpl} selected={selectedTemplate.id===tpl.id} onClick={()=>selectTemplate(tpl)} text={newText}/>))}
-          </div>
-        </div>
-      </aside>
-
-      <div className="flex-1 flex flex-col p-3 overflow-hidden min-w-0">
-        <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-          <h1 className="text-lg font-black text-purple-400" style={{fontFamily:"Cinzel"}}>TEXT OVERLAY ANIMATOR</h1>
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-zinc-600">Template:</span><span className="text-zinc-300">{selectedTemplate.name}</span>
-            {selectedOverlayInstances.size>0&&<span className="text-purple-300 text-[10px] border border-purple-700/40 px-1.5 py-0.5 rounded">{selectedOverlayInstances.size} overlays</span>}
-          </div>
-        </div>
-        <div className="relative mb-2">
-          <button onClick={()=>setShowSizeMenu(v=>!v)} className="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/30">
-            <span>📐</span><span className="flex-1 text-left truncate">{canvasPreset.label}</span><span className="text-zinc-500 text-[10px] font-mono">{canvasPreset.w}×{canvasPreset.h}</span>
-          </button>
-          {showSizeMenu&&(<div className="absolute top-full left-0 mt-1 z-50 w-80 rounded border border-zinc-700/40 bg-[#0c0c16] shadow-xl max-h-72 overflow-y-auto">
-            {CANVAS_PRESETS.map((p,i)=>(<button key={i} onClick={()=>{setCanvasPreset(p);setShowSizeMenu(false);}} className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between hover:bg-zinc-700/30 ${canvasPreset.label===p.label?"bg-zinc-700/50 text-purple-300":"text-zinc-400"}`}><span>{p.label}</span><span className="text-[9px] text-zinc-600">{p.w}×{p.h}</span></button>))}
-          </div>)}
-        </div>
-        <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0">
-          <div className="relative rounded border border-purple-900/30 overflow-hidden bg-[#05050a]" style={{aspectRatio:`${canvasPreset.w} / ${canvasPreset.h}`,maxWidth:"100%",maxHeight:"100%",boxShadow:"0 0 30px rgba(139,0,0,0.1)"}}>
-            <canvas ref={canvasRef} style={{width:"100%",height:"100%",display:"block",cursor:"crosshair"}} onMouseDown={handleCanvasMouseDown}/>
-            {recording&&(<div className="absolute top-2 right-2 flex items-center gap-2 px-3 py-1.5 rounded bg-red-900/50 border border-red-700/60"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/><span className="text-[10px] text-red-300 font-mono font-bold">REC {fmt(recordingTime)}</span></div>)}
-            <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/60 border border-zinc-700/30 text-[9px] text-zinc-500 font-mono">{canvasPreset.w}×{canvasPreset.h}</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 mt-2 flex-wrap flex-shrink-0">
-          <button onClick={handleExportPng} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-purple-700/30">📷 PNG</button>
-          <button onClick={recording?stopRecording:startRecording} className={`px-4 py-1.5 rounded text-xs font-bold border transition-all ${recording?"bg-red-600/30 border-red-500/50 text-red-300 animate-pulse":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-red-700/30"}`}>{recording?`◼ Stop (${fmt(recordingTime)})`:"● Record"}</button>
+    <div className="h-full flex flex-col overflow-hidden text-zinc-300">
+      {/* TOP CONTROLS */}
+      <div className="flex-shrink-0 px-3 py-2 border-b border-zinc-800/40 flex items-center justify-between gap-2 flex-wrap">
+        <h1 className="text-base font-black text-purple-400" style={{fontFamily:"Cinzel"}}>HORROR ANIMATOR</h1>
+        <div className="flex items-center gap-2">
           <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload}/>
-          <button onClick={()=>bgFileRef.current?.click()} className={`px-3 py-1.5 rounded text-xs border transition-colors ${bgImage?"bg-green-900/20 border-green-700/40 text-green-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300"}`}>🖼️ BG</button>
+          <button onClick={()=>bgFileRef.current?.click()} className={`px-2 py-1 rounded text-xs border ${bgImage?"bg-green-900/20 border-green-700/40 text-green-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300"}`}>🖼️ BG</button>
           <input ref={bgVidRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload}/>
-          <button onClick={()=>bgVidRef.current?.click()} className={`px-3 py-1.5 rounded text-xs border transition-colors ${bgVideo?"bg-blue-900/20 border-blue-700/40 text-blue-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300"}`}>🎬 BG Video</button>
-          {(bgImage||bgVideo)&&(<><select value={bgObjectFit} onChange={e=>setBgObjectFit(e.target.value as any)} className="px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300"><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select><button onClick={clearBg} className="px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-400 hover:text-red-400">Clear</button></>)}
-          <button onClick={()=>{setShowOverlayPanel(v=>!v);setRightTab("overlay");}} className={`px-3 py-1.5 rounded text-xs border transition-colors ${activeOverlays.length>0?"bg-purple-900/30 border-purple-700/40 text-purple-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300"}`}>🎭 ({activeOverlays.length})</button>
-          <button onClick={()=>{setShowSoundPanel(v=>!v);setRightTab("sound");}} className={`px-3 py-1.5 rounded text-xs border transition-colors ${activeSounds.length>0?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300"}`}>🔊 ({activeSounds.length})</button>
-          <button onClick={saveProjectAsWebM} className="px-3 py-1.5 rounded bg-blue-900/30 border border-blue-700/40 text-blue-300 text-xs font-bold">🎥 Export WebM</button>
-          <button onClick={saveProject} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300">💾 JSON</button>
+          <button onClick={()=>bgVidRef.current?.click()} className={`px-2 py-1 rounded text-xs border ${bgVideo?"bg-blue-900/20 border-blue-700/40 text-blue-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300"}`}>🎬 BG Video</button>
+          {(bgImage||bgVideo)&&(<><select value={bgObjectFit} onChange={e=>setBgObjectFit(e.target.value as any)} className="px-1.5 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300"><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select><button onClick={clearBg} className="px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-400 hover:text-red-400">Clear</button></>)}
+          <button onClick={handleExportPng} className="px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-purple-700/30">📷 PNG</button>
+          <button onClick={recording?stopRecording:startRecording} className={`px-3 py-1 rounded text-xs font-bold border transition-all ${recording?"bg-red-600/30 border-red-500/50 text-red-300 animate-pulse":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-red-700/30"}`}>{recording?`◼ Stop (${fmt(recordingTime)})`:"● Record"}</button>
+          <button onClick={saveProject} className="px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300">💾 JSON</button>
           <input ref={loadProjectRef} type="file" accept=".json" className="hidden" onChange={loadProject}/>
-          <button onClick={()=>loadProjectRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300">📂 Load</button>
-          <button onClick={()=>setShowRecordings(v=>!v)} className="ml-auto px-3 py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400">📁 ({recordings.length})</button>
+          <button onClick={()=>loadProjectRef.current?.click()} className="px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300">📂 Load</button>
+        </div>
+      </div>
+
+      {/* CANVAS AREA */}
+      <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0 px-3 py-3">
+        <div className="relative rounded border border-purple-900/30 overflow-hidden bg-[#05050a]" style={{aspectRatio:`${canvasPreset.w} / ${canvasPreset.h}`,maxWidth:"100%",maxHeight:"100%",boxShadow:"0 0 30px rgba(139,0,0,0.1)"}}>
+          <canvas ref={canvasRef} style={{width:"100%",height:"100%",display:"block",cursor:"crosshair"}} onMouseDown={handleCanvasMouseDown}/>
+          {recording&&(<div className="absolute top-2 right-2 flex items-center gap-2 px-3 py-1.5 rounded bg-red-900/50 border border-red-700/60"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/><span className="text-[10px] text-red-300 font-mono font-bold">REC {fmt(recordingTime)}</span></div>)}
+          <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/60 border border-zinc-700/30 text-[9px] text-zinc-500 font-mono">{canvasPreset.w}×{canvasPreset.h}</div>
+        </div>
+      </div>
+
+      {/* BOTTOM TABS */}
+      <div className="flex-shrink-0 border-t border-zinc-800/40 flex flex-col">
+        <div className="flex gap-0 border-b border-zinc-800/40">
+          {(["templates","overlays","sounds","recordings"] as const).map(tab => (
+            <button key={tab} onClick={()=>setBottomTab(tab)} className={`px-3 py-1.5 text-xs uppercase font-bold tracking-wider transition-colors ${bottomTab===tab?"bg-zinc-800/40 text-zinc-100 border-b-2 border-purple-500":"text-zinc-500 hover:text-zinc-300"}`}>
+              {tab==="templates"?"📋":tab==="overlays"?"🎭":tab==="sounds"?"🔊":"📁"} {tab}
+            </button>
+          ))}
         </div>
 
-        {showRecordings&&(<div className="mt-2 rounded border border-zinc-800/40 bg-[#06060c] max-h-40 overflow-y-auto flex-shrink-0">
-          {recordings.length===0?<p className="text-xs text-zinc-600 p-3 text-center">No recordings</p>:recordings.map((rec,i)=>(<div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/30 hover:bg-zinc-800/20"><div className="flex-1 min-w-0"><div className="text-xs text-zinc-300 truncate">{rec.name}</div><div className="text-[9px] text-zinc-600">{(rec.size/1024/1024).toFixed(1)} MB</div></div><a href={rec.url} download={rec.name} className="px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-400 hover:text-white transition-colors">↓ Download</a></div>))}
-        </div>)}
+        {/* TEMPLATES PANEL */}
+        {bottomTab==="templates"&&(
+          <div className="flex-1 overflow-y-auto max-h-64 p-2">
+            <div className="space-y-2">
+              <div className="flex gap-1 flex-wrap">
+                {categories.map(cat=>(<button key={cat} onClick={()=>setActiveCategory(cat)} className={`px-1.5 py-0.5 rounded text-[8px] font-medium transition-all border ${activeCategory===cat?"bg-red-900/20 border-red-700/40 text-red-300":"border-zinc-800/40 text-zinc-600 hover:text-zinc-300"}`}>{cat}</button>))}
+              </div>
+              <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search..." className="w-full px-2 py-1 rounded bg-zinc-800/50 border border-zinc-700/30 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-red-700/40"/>
+              <div className="grid grid-cols-4 gap-1">
+                {filtered.slice(0,20).map(tpl=>(<TemplateCard key={tpl.id} template={tpl} selected={selectedTemplate.id===tpl.id} onClick={()=>selectTemplate(tpl)} text={newText}/>))}
+              </div>
+            </div>
+          </div>
+        )}
 
-        {showOverlayPanel&&(
-          <div className="mt-2 rounded border border-purple-900/40 bg-[#06060c]/95 flex-shrink-0 max-h-96 overflow-y-auto">
+        {/* OVERLAYS PANEL */}
+        {bottomTab==="overlays"&&(
+          <div className="flex-1 overflow-y-auto max-h-64 p-2">
             {activeOverlays.length>0&&(
-              <div className="p-2 border-b border-zinc-800/30">
-                <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1.5">Active ({activeOverlays.length}) - Ctrl+Click to select multiple</div>
+              <div className="mb-2 pb-2 border-b border-zinc-800/30">
+                <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Active ({activeOverlays.length})</div>
                 <div className="flex flex-wrap gap-1">
                   {activeOverlays.map(ov=>(
-                    <div key={ov.instanceId} className={`flex items-center gap-1 px-2 py-1 rounded text-xs border cursor-pointer transition-all ${selectedOverlayInstances.has(ov.instanceId)?"bg-purple-900/50 border-purple-700/40 text-purple-300":"border-zinc-800/40 text-zinc-500 hover:text-zinc-300"}`}>
-                      <span onClick={()=>{
-                        setSelectedOverlayInstances(new Set([ov.instanceId]));
-                        setEditingOverlay(ov.instanceId);
-                      }}>{ov.emoji} {ov.label}</span>
-                      <button onClick={()=>removeOverlay(ov.instanceId)} className="text-zinc-600 hover:text-red-400">×</button>
+                    <div key={ov.instanceId} className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border cursor-pointer transition-all ${selectedOverlayInstances.has(ov.instanceId)?"bg-purple-900/50 border-purple-700/40 text-purple-300":"border-zinc-800/40 text-zinc-500 hover:text-zinc-300"}`}>
+                      <span onClick={()=>{setSelectedOverlayInstances(new Set([ov.instanceId]));setEditingOverlay(ov.instanceId);}}>{ov.emoji} {ov.label}</span>
+                      <button onClick={()=>removeOverlay(ov.instanceId)} className="text-zinc-600 hover:text-red-400 ml-0.5">×</button>
                     </div>))}
                 </div>
-              </div>)}
-
+              </div>
+            )}
             {editOv&&(
-              <div className="p-3 border-b border-zinc-800/30">
-                <div className="text-[10px] text-purple-300 font-bold uppercase tracking-wider mb-2">{editOv.emoji} {editOv.label} - Edit</div>
-                <div className="space-y-2">
-                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Opacity: {Math.round((editOv.opacity??1)*100)}%</label><input type="range" min={0} max={100} value={Math.round((editOv.opacity??1)*100)} onChange={e=>updateOverlayProp(editOv.instanceId,{opacity:Number(e.target.value)/100})} className="w-full accent-purple-500"/></div>
-                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Scale: {(editOv.scale).toFixed(2)}</label><input type="range" min={0.1} max={3} step={0.05} value={editOv.scale} onChange={e=>updateOverlayProp(editOv.instanceId,{scale:Number(e.target.value)})} className="w-full accent-purple-500"/></div>
-                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Rotation: {Math.round((editOv.rotation||0)*180/Math.PI)}°</label><input type="range" min={-180} max={180} value={Math.round((editOv.rotation||0)*180/Math.PI)} onChange={e=>updateOverlayProp(editOv.instanceId,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-purple-500"/></div>
-                  <button onClick={()=>removeOverlay(editOv.instanceId)} className="w-full py-1 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-xs hover:bg-red-900/50">Remove</button>
+              <div className="mb-2 pb-2 border-b border-zinc-800/30">
+                <div className="text-[9px] text-purple-300 font-bold uppercase mb-1">{editOv.emoji} {editOv.label}</div>
+                <div className="space-y-1.5">
+                  <div><label className="text-[8px] text-zinc-500 uppercase block mb-0.5">Opacity: {Math.round((editOv.opacity??1)*100)}%</label><input type="range" min={0} max={100} value={Math.round((editOv.opacity??1)*100)} onChange={e=>updateOverlayProp(editOv.instanceId,{opacity:Number(e.target.value)/100})} className="w-full accent-purple-500"/></div>
+                  <div><label className="text-[8px] text-zinc-500 uppercase block mb-0.5">Scale: {(editOv.scale).toFixed(2)}</label><input type="range" min={0.1} max={3} step={0.05} value={editOv.scale} onChange={e=>updateOverlayProp(editOv.instanceId,{scale:Number(e.target.value)})} className="w-full accent-purple-500"/></div>
+                  <div><label className="text-[8px] text-zinc-500 uppercase block mb-0.5">Rotation: {Math.round((editOv.rotation||0)*180/Math.PI)}°</label><input type="range" min={-180} max={180} value={Math.round((editOv.rotation||0)*180/Math.PI)} onChange={e=>updateOverlayProp(editOv.instanceId,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-purple-500"/></div>
                 </div>
-              </div>)}
-
-            <div className="p-2">
-              <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-2 font-bold">Add Overlay / Effect</div>
-              <div className="grid grid-cols-4 gap-1">
-                {filteredOverlays.slice(0,16).map((o:any)=>(
-                  <button key={o.id} onClick={()=>o.id.startsWith("custom:")?addCustomOverlay(customOverlays.find(c=>`custom:${c.id}`===o.id)!):addOverlay(o.id)} className="px-1 py-1.5 rounded text-[10px] border border-zinc-800/40 text-zinc-500 hover:text-zinc-300 hover:border-purple-700/40 transition-colors" title={o.label}>
+              </div>
+            )}
+            <div>
+              <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1 font-bold">Add Effect</div>
+              <div className="grid grid-cols-8 gap-1">
+                {filteredOverlays.slice(0,32).map((o:any)=>(
+                  <button key={o.id} onClick={()=>o.id.startsWith("custom:")?addCustomOverlay(customOverlays.find(c=>`custom:${c.id}`===o.id)!):addOverlay(o.id)} className="px-1 py-1 rounded text-sm border border-zinc-800/40 text-zinc-500 hover:text-zinc-300 hover:border-purple-700/40 transition-colors" title={o.label}>
                     {o.emoji}
                   </button>))}
               </div>
             </div>
-          </div>)}
+          </div>
+        )}
 
-        {showSoundPanel&&(
-          <div className="mt-2 rounded border border-green-900/40 bg-[#04080a]/95 flex-shrink-0 max-h-48 overflow-y-auto">
+        {/* SOUNDS PANEL */}
+        {bottomTab==="sounds"&&(
+          <div className="flex-1 overflow-y-auto max-h-64 p-2">
             {activeSounds.length>0&&(
-              <div className="p-2 border-b border-zinc-800/30">
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="text-[9px] text-green-400 uppercase tracking-wider">Playing ({activeSounds.length})</div>
-                  <button onClick={stopAllSounds} className="px-2 py-0.5 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-[9px]">⏹ Stop</button>
+              <div className="mb-2 pb-2 border-b border-zinc-800/30">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-[9px] text-green-400 uppercase">Playing ({activeSounds.length})</div>
+                  <button onClick={stopAllSounds} className="px-1.5 py-0.5 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-[9px]">⏹ Stop</button>
                 </div>
-              </div>)}
-            <div className="p-2">
-              <div className="text-[10px] text-green-400 uppercase tracking-wider font-bold mb-2">🎵 Sounds</div>
-              <div className="grid grid-cols-4 gap-1">
-                {filteredSounds.slice(0,16).map(s=>(
-                  <button key={s.id} onClick={()=>toggleSound(s)} className={`px-1 py-1.5 rounded text-[10px] border transition-all ${activeSounds.some(a=>a.id===s.id)?"bg-green-900/30 border-green-700/40 text-green-300":"border-zinc-800/40 text-zinc-500 hover:text-zinc-300"}`} title={s.name}>
-                    {s.emoji}
-                  </button>))}
               </div>
+            )}
+            <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1 font-bold">Sounds</div>
+            <div className="grid grid-cols-8 gap-1">
+              {filteredSounds.slice(0,32).map(s=>(
+                <button key={s.id} onClick={()=>toggleSound(s)} className={`px-1 py-1 rounded text-sm border transition-all ${activeSounds.some(a=>a.id===s.id)?"bg-green-900/30 border-green-700/40 text-green-300":"border-zinc-800/40 text-zinc-500 hover:text-zinc-300"}`} title={s.name}>
+                  {s.emoji}
+                </button>))}
             </div>
-          </div>)}
+          </div>
+        )}
+
+        {/* RECORDINGS PANEL */}
+        {bottomTab==="recordings"&&(
+          <div className="flex-1 overflow-y-auto max-h-64 p-2">
+            <div className="text-[9px] text-zinc-600 mb-1.5 uppercase tracking-wider font-bold">{recordings.length} Recordings</div>
+            {recordings.length===0?<p className="text-xs text-zinc-600">No recordings yet</p>:
+              <div className="space-y-1">
+                {recordings.map((rec,i)=>(<div key={i} className="flex items-center gap-2 px-2 py-1 rounded border border-zinc-800/30 hover:bg-zinc-800/20 bg-zinc-900/30">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-zinc-300 truncate font-mono">{rec.name}</div>
+                    <div className="text-[8px] text-zinc-600">{(rec.size/1024/1024).toFixed(1)} MB</div>
+                  </div>
+                  <a href={rec.url} download={rec.name} className="px-2 py-0.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-[9px] text-zinc-400 hover:text-white transition-colors flex-shrink-0">↓</a>
+                </div>))}</div>
+            }
+          </div>
+        )}
       </div>
 
-      <aside className="w-60 flex-shrink-0 border-l border-red-900/20 bg-[#050508] flex flex-col overflow-y-auto">
-        <div className="flex border-b border-zinc-800/40">
-          {(["text","overlay","sound"] as const).map(tab=>(
-            <button key={tab} onClick={()=>setRightTab(tab)} className={`flex-1 py-2 text-[9px] uppercase tracking-wider font-bold transition-colors ${rightTab===tab?"bg-red-900/20 text-red-300 border-b-2 border-red-500/50":"text-zinc-600 hover:text-zinc-300"}`}>
-              {tab==="text"?"✏️":tab==="overlay"?"🎭":"🔊"}
-            </button>))}
-        </div>
-        <div className="p-3 overflow-y-auto flex-1">
-          {rightTab==="text"&&sl&&(
+      {/* RIGHT SIDEBAR */}
+      <div className="fixed right-0 top-0 bottom-0 w-56 border-l border-red-900/20 bg-[#050508] flex flex-col overflow-y-auto z-40">
+        <div className="p-3">
+          {sl&&(
             <div className="space-y-3">
-              <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold" style={{fontFamily:"Cinzel"}}>Edit Text</h2>
+              <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold" style={{fontFamily:"Cinzel"}}>Text Settings</h2>
               <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Text</label><input type="text" value={sl.text} onChange={e=>updateLayer(sl.id,{text:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none focus:border-red-700/40"/></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Animation</label><select value={sl.animation} onChange={e=>updateLayer(sl.id,{animation:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300"><option>none</option>{ALL_ANIMATIONS.filter(a=>a!=="none").slice(0,30).map(a=>(<option key={a}>{a}</option>))}</select></div>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Animation</label><select value={sl.animation} onChange={e=>updateLayer(sl.id,{animation:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300"><option>none</option>{ALL_ANIMATIONS.filter(a=>a!=="none").slice(0,50).map(a=>(<option key={a}>{a}</option>))}</select></div>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Font</label><select value={sl.fontFamily} onChange={e=>updateLayer(sl.id,{fontFamily:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 max-h-32">{FONT_OPTIONS.map(f=>(<option key={f}>{f}</option>))}</select></div>
               <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Size: {sl.fontSize}px</label><input type="range" min={8} max={600} value={sl.fontSize} onChange={e=>updateLayer(sl.id,{fontSize:Number(e.target.value)})} className="w-full accent-red-500"/></div>
               <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Color</label><input type="color" value={sl.color} onChange={e=>updateLayer(sl.id,{color:e.target.value})} className="w-full h-8 rounded border border-zinc-700/30 cursor-pointer"/></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Opacity</label><input type="range" min={0} max={100} value={Math.round(sl.opacity*100)} onChange={e=>updateLayer(sl.id,{opacity:Number(e.target.value)/100})} className="w-full accent-red-500"/></div>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Stroke Width: {sl.strokeWidth}</label><input type="range" min={0} max={10} step={0.5} value={sl.strokeWidth} onChange={e=>updateLayer(sl.id,{strokeWidth:Number(e.target.value)})} className="w-full accent-red-500"/></div>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Stroke Color</label><input type="color" value={sl.strokeColor} onChange={e=>updateLayer(sl.id,{strokeColor:e.target.value})} className="w-full h-8 rounded border border-zinc-700/30 cursor-pointer"/></div>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Opacity: {Math.round(sl.opacity*100)}%</label><input type="range" min={0} max={100} value={Math.round(sl.opacity*100)} onChange={e=>updateLayer(sl.id,{opacity:Number(e.target.value)/100})} className="w-full accent-red-500"/></div>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Rotation: {Math.round(sl.rotation*180/Math.PI)}°</label><input type="range" min={-180} max={180} value={Math.round(sl.rotation*180/Math.PI)} onChange={e=>updateLayer(sl.id,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-red-500"/></div>
+              <div className="flex items-center justify-between"><label className="text-[9px] text-zinc-500 uppercase">Shadow</label><button onClick={()=>updateLayer(sl.id,{shadowEnabled:!sl.shadowEnabled})} className={`px-2 py-0.5 rounded text-xs border ${sl.shadowEnabled?"bg-red-900/30 border-red-700/40 text-red-300":"border-zinc-800/40 text-zinc-600"}`}>{sl.shadowEnabled?"✓":"✗"}</button></div>
+              {sl.shadowEnabled&&(<><div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Shadow Color</label><input type="color" value={sl.shadowColor} onChange={e=>updateLayer(sl.id,{shadowColor:e.target.value})} className="w-full h-6 rounded border border-zinc-700/30 cursor-pointer"/></div><div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Blur: {sl.shadowBlur}</label><input type="range" min={0} max={30} value={sl.shadowBlur} onChange={e=>updateLayer(sl.id,{shadowBlur:Number(e.target.value)})} className="w-full accent-red-500"/></div></>)}
+              <div className="flex items-center justify-between"><label className="text-[9px] text-zinc-500 uppercase">Glow</label><button onClick={()=>updateLayer(sl.id,{glowEnabled:!sl.glowEnabled})} className={`px-2 py-0.5 rounded text-xs border ${sl.glowEnabled?"bg-red-900/30 border-red-700/40 text-red-300":"border-zinc-800/40 text-zinc-600"}`}>{sl.glowEnabled?"✓":"✗"}</button></div>
+              {sl.glowEnabled&&(<div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Glow Color</label><input type="color" value={sl.glowColor} onChange={e=>updateLayer(sl.id,{glowColor:e.target.value})} className="w-full h-6 rounded border border-zinc-700/30 cursor-pointer"/></div>)}
             </div>
           )}
-          {rightTab==="text"&&!sl&&<p className="text-[10px] text-zinc-600 text-center py-4">Select a text layer</p>}
-          {rightTab==="overlay"&&<p className="text-[10px] text-zinc-600 text-center py-4">Edit overlays on canvas (Ctrl+Click for multi-select)</p>}
-          {rightTab==="sound"&&<p className="text-[10px] text-zinc-600 text-center py-4">Manage sounds below</p>}
+          {!sl&&<p className="text-[10px] text-zinc-600 text-center py-4">Select a text layer to edit</p>}
         </div>
-      </aside>
+      </div>
+
+      {/* ADJUST MAIN AREA FOR SIDEBAR */}
+      <style>{`
+        body { padding-right: 224px; }
+      `}</style>
     </div>
   );
 }
