@@ -886,79 +886,108 @@ export default function TextAnimator() {
 
   const handleExportPng=()=>{const cv=canvasRef.current;if(!cv)return;const a=document.createElement("a");a.href=cv.toDataURL("image/png");a.download=`horror-overlay-${canvasPreset.w}x${canvasPreset.h}.png`;a.click();};
 
-  const startRecording = async () => {
-    const cv = canvasRef.current; if (!cv) return;
-    chunksRef.current = []; setRecordingTime(0);
-    const videoStream = cv.captureStream(60);
-    let finalStream: MediaStream = videoStream;
-    try {
-      if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
-        audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
-      }
-      const actx = audioCtxRef.current;
-      if (actx.state === "suspended") await actx.resume();
-      if (!audioDestRef.current) {
-        audioDestRef.current = actx.createMediaStreamDestination();
-      }
-      const dest = audioDestRef.current;
-      const vid = bgVideoRef.current;
-      if (vid && !vid.muted && vid.readyState >= 2) {
-        try {
-          if (!(vid as any)._srcNode) {
-            (vid as any)._srcNode = actx.createMediaElementSource(vid);
-          }
-          (vid as any)._srcNode.connect(dest);
-          (vid as any)._srcNode.connect(actx.destination);
-        } catch (e) { console.warn("BG video audio:", e); }
-      }
-      Object.entries(audioElsRef.current).forEach(([id, audio]) => {
-        try {
-          if (!(audio as any)._srcNode) {
-            (audio as any)._srcNode = actx.createMediaElementSource(audio);
-          }
-          (audio as any)._srcNode.connect(dest);
-          (audio as any)._srcNode.connect(actx.destination);
-        } catch (e) { console.warn(`Sound ${id}:`, e); }
-      });
-      if (dest.stream.getAudioTracks().length > 0) {
-        finalStream = new MediaStream([
-          ...videoStream.getVideoTracks(),
-          ...dest.stream.getAudioTracks(),
-        ]);
-      }
-    } catch (err) {
-      console.warn("Audio setup failed, video only:", err);
+ const startRecording = async () => {
+  const cv = canvasRef.current; if (!cv) return;
+  chunksRef.current = []; setRecordingTime(0);
+
+  // 30fps use karo — 60fps pe chunks empty aate hain
+  const videoStream = cv.captureStream(30);
+  let finalStream: MediaStream = videoStream;
+
+  try {
+    if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+      audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
     }
-    const codecCandidates = [
-      "video/webm;codecs=vp9,opus","video/webm;codecs=vp9",
-      "video/webm;codecs=vp8,opus","video/webm;codecs=vp8","video/webm",
-    ];
-    const mimeType = codecCandidates.find(c => MediaRecorder.isTypeSupported(c)) ?? "video/webm";
-    const mr = new MediaRecorder(finalStream, {
-      mimeType, videoBitsPerSecond: 20_000_000, audioBitsPerSecond: 320_000,
+    const actx = audioCtxRef.current;
+    if (actx.state === "suspended") await actx.resume();
+
+    // AudioDestination har baar fresh banao
+    audioDestRef.current = actx.createMediaStreamDestination();
+    const dest = audioDestRef.current;
+
+    const vid = bgVideoRef.current;
+    if (vid && !vid.muted && vid.readyState >= 2) {
+      try {
+        if (!(vid as any)._srcNode) {
+          (vid as any)._srcNode = actx.createMediaElementSource(vid);
+        }
+        (vid as any)._srcNode.connect(dest);
+        (vid as any)._srcNode.connect(actx.destination);
+      } catch (e) { console.warn("BG video audio:", e); }
+    }
+
+    Object.entries(audioElsRef.current).forEach(([id, audio]) => {
+      try {
+        if (!(audio as any)._srcNode) {
+          (audio as any)._srcNode = actx.createMediaElementSource(audio);
+        }
+        (audio as any)._srcNode.connect(dest);
+        (audio as any)._srcNode.connect(actx.destination);
+      } catch (e) { console.warn(`Sound ${id}:`, e); }
     });
-    mr.ondataavailable = ev => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
-    mr.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const name = `rec-${Date.now()}.webm`;
-      setRecordings(prev => [{ name, url, size: blob.size, webmBlob: blob }, ...prev]);
-      const a = document.createElement("a"); a.href = url; a.download = name; a.click();
-    };
-    setTimeout(() => {
-      mr.start(100);
-      mediaRecorderRef.current = mr;
-      setRecording(true);
-      // FIX: Selection deselect karo recording shuru hone pe
-      setSelectedLayerId(null);
-      setSelectedOverlayInstance(null);
-      let el = 0;
-      recTimerRef.current = setInterval(() => {
-        el++; setRecordingTime(el);
-        if (el >= 5 * 60) stopRecording();
-      }, 1000);
-    }, 300);
+
+    if (dest.stream.getAudioTracks().length > 0) {
+      finalStream = new MediaStream([
+        ...videoStream.getVideoTracks(),
+        ...dest.stream.getAudioTracks(),
+      ]);
+    }
+  } catch (err) {
+    console.warn("Audio setup failed, video only:", err);
+    finalStream = videoStream;
+  }
+
+  // Sabse compatible codec pehle try karo
+  const codecCandidates = [
+    "video/webm;codecs=vp8,opus",
+    "video/webm;codecs=vp8",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp9",
+    "video/webm",
+  ];
+  const mimeType = codecCandidates.find(c => MediaRecorder.isTypeSupported(c)) ?? "video/webm";
+
+  const mr = new MediaRecorder(finalStream, {
+    mimeType,
+    videoBitsPerSecond: 8_000_000,   // 8Mbps — stable
+    audioBitsPerSecond: 128_000,
+  });
+
+  mr.ondataavailable = ev => {
+    if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data);
   };
+
+  mr.onstop = () => {
+    if (chunksRef.current.length === 0) {
+      alert("Recording mein koi data nahi aaya. Dobara try karo.");
+      return;
+    }
+    const blob = new Blob(chunksRef.current, { type: mimeType });
+    if (blob.size < 1000) {
+      alert("Recording file bohat chhoti hai. Dobara try karo.");
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const name = `rec-${Date.now()}.webm`;
+    setRecordings(prev => [{ name, url, size: blob.size, webmBlob: blob }, ...prev]);
+    const a = document.createElement("a"); a.href = url; a.download = name; a.click();
+  };
+
+  // Canvas ready hone ka wait karo, phir start karo
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  mr.start(250);  // 250ms chunks — stable
+  mediaRecorderRef.current = mr;
+  setRecording(true);
+  setSelectedLayerId(null);
+  setSelectedOverlayInstance(null);
+
+  let el = 0;
+  recTimerRef.current = setInterval(() => {
+    el++; setRecordingTime(el);
+    if (el >= 5 * 60) stopRecording();
+  }, 1000);
+};
 
   const stopRecording=()=>{
     if(recTimerRef.current){clearInterval(recTimerRef.current);recTimerRef.current=null;}
