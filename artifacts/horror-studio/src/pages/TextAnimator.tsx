@@ -1143,10 +1143,9 @@ const convertToMp4 = async (webmBlob: Blob, recName: string) => {
             </div>))}
         </div>
       </div>)}
-
-    {selectedOverlayInstance?(()=>{
+{(()=>{
       const ov=activeOverlays.find(o=>o.instanceId===selectedOverlayInstance);
-      if(!ov)return <p className="text-[10px] text-zinc-600">Overlay not found</p>;
+      if(!selectedOverlayInstance||!ov) return <p className="text-[10px] text-zinc-600 py-2 text-center">Koi overlay select nahi</p>;
       const co=customOverlays.find(c=>`custom:${c.id}`===ov.defId);
       const isEditOvVid=ov.defId.startsWith("custom:")&&co?.isVideo;
       return(
@@ -1171,7 +1170,7 @@ const convertToMp4 = async (webmBlob: Blob, recName: string) => {
           </>}
           <button onClick={()=>removeOverlay(ov.instanceId)} className="w-full py-1 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-xs hover:bg-red-900/50">🗑 Remove</button>
         </div>);
-    })():<p className="text-[10px] text-zinc-600 py-2 text-center">Koi overlay select nahi</p>}
+    })()}
 
     <div className="pt-2 border-t border-zinc-800/30">
       <div className="flex items-center gap-1 mb-2 flex-wrap">
