@@ -890,8 +890,18 @@ export default function TextAnimator() {
   const cv = canvasRef.current; if (!cv) return;
   chunksRef.current = []; setRecordingTime(0);
 
-  // 30fps use karo — 60fps pe chunks empty aate hain
+  // FIX 1: Pehle canvas ko ek frame paint karne do
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  // FIX 2: captureStream BAAD mein call karo, pehle nahi
   const videoStream = cv.captureStream(30);
+  
+  // FIX 3: Stream mein video tracks hain ya nahi check karo
+  if (videoStream.getVideoTracks().length === 0) {
+    alert("Canvas stream nahi bana. Browser support check karo.");
+    return;
+  }
+
   let finalStream: MediaStream = videoStream;
 
   try {
@@ -901,7 +911,6 @@ export default function TextAnimator() {
     const actx = audioCtxRef.current;
     if (actx.state === "suspended") await actx.resume();
 
-    // AudioDestination har baar fresh banao
     audioDestRef.current = actx.createMediaStreamDestination();
     const dest = audioDestRef.current;
 
@@ -937,7 +946,7 @@ export default function TextAnimator() {
     finalStream = videoStream;
   }
 
-  // Sabse compatible codec pehle try karo
+  // FIX 4: Codec selection — VP8 sabse zyada compatible hai
   const codecCandidates = [
     "video/webm;codecs=vp8,opus",
     "video/webm;codecs=vp8",
@@ -946,18 +955,41 @@ export default function TextAnimator() {
     "video/webm",
   ];
   const mimeType = codecCandidates.find(c => MediaRecorder.isTypeSupported(c)) ?? "video/webm";
+  
+  console.log("Using mimeType:", mimeType);
+  console.log("Video tracks:", finalStream.getVideoTracks().length);
+  console.log("Audio tracks:", finalStream.getAudioTracks().length);
 
-  const mr = new MediaRecorder(finalStream, {
-    mimeType,
-    videoBitsPerSecond: 8_000_000,   // 8Mbps — stable
-    audioBitsPerSecond: 128_000,
-  });
+  let mr: MediaRecorder;
+  try {
+    mr = new MediaRecorder(finalStream, {
+      mimeType,
+      videoBitsPerSecond: 8_000_000,
+      audioBitsPerSecond: 128_000,
+    });
+  } catch (err) {
+    // FIX 5: Options fail hain toh bina options ke try karo
+    console.warn("MediaRecorder with options failed, trying without:", err);
+    try {
+      mr = new MediaRecorder(finalStream);
+    } catch (err2) {
+      alert("MediaRecorder nahi bana. Browser compatible nahi.");
+      return;
+    }
+  }
 
   mr.ondataavailable = ev => {
+    console.log("Data chunk:", ev.data?.size);
     if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data);
   };
 
+  mr.onerror = (ev) => {
+    console.error("MediaRecorder error:", ev);
+    stopRecording();
+  };
+
   mr.onstop = () => {
+    console.log("Total chunks:", chunksRef.current.length);
     if (chunksRef.current.length === 0) {
       alert("Recording mein koi data nahi aaya. Dobara try karo.");
       return;
@@ -973,14 +1005,20 @@ export default function TextAnimator() {
     const a = document.createElement("a"); a.href = url; a.download = name; a.click();
   };
 
-  // Canvas ready hone ka wait karo, phir start karo
-  await new Promise(resolve => setTimeout(resolve, 500));
-
-  mr.start(250);  // 250ms chunks — stable
+  // FIX 6: Start karo aur foran ek requestData trigger karo
+  mr.start(500); // 500ms chunks
   mediaRecorderRef.current = mr;
   setRecording(true);
   setSelectedLayerId(null);
   setSelectedOverlayInstance(null);
+
+  // FIX 7: 1 second baad manually ek chunk request karo
+  setTimeout(() => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.requestData();
+      console.log("Manual requestData called, chunks so far:", chunksRef.current.length);
+    }
+  }, 1000);
 
   let el = 0;
   recTimerRef.current = setInterval(() => {
@@ -988,7 +1026,6 @@ export default function TextAnimator() {
     if (el >= 5 * 60) stopRecording();
   }, 1000);
 };
-
   const stopRecording=()=>{
     if(recTimerRef.current){clearInterval(recTimerRef.current);recTimerRef.current=null;}
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=="inactive"){mediaRecorderRef.current.requestData?.();setTimeout(()=>{if(mediaRecorderRef.current?.state!=="inactive")mediaRecorderRef.current?.stop();},200);}
