@@ -1092,9 +1092,7 @@ const convertToMp4 = async (webmBlob: Blob, recName: string) => {
   </div>
 )}
 
-        {/* ── Overlay Panel ── */}
-        {showOverlayPanel&&(
-          <div className="mt-2 rounded border border-purple-900/40 bg-[#06060c]/95 flex-shrink-0 max-h-96 overflow-y-auto">
+       
             {/* Active overlays list */}
             {activeOverlays.length>0&&(
               <div className="p-2 border-b border-zinc-800/30">
@@ -1232,9 +1230,7 @@ const convertToMp4 = async (webmBlob: Blob, recName: string) => {
             </div>
           </div>)}
 
-        {/* ── Sound Panel ── */}
-        {showSoundPanel&&(
-          <div className="mt-2 rounded border border-green-900/40 bg-[#04080a]/95 flex-shrink-0 max-h-96 overflow-y-auto">
+       
             {/* Active sounds */}
             {activeSounds.length>0&&(
               <div className="p-2 border-b border-zinc-800/30">
@@ -1314,11 +1310,11 @@ const convertToMp4 = async (webmBlob: Blob, recName: string) => {
       <aside className="w-60 flex-shrink-0 border-l border-red-900/20 bg-[#050508] flex flex-col overflow-y-auto">
         {/* Tab switcher */}
         <div className="flex border-b border-zinc-800/40">
-          {(["text","overlay","sound"] as const).map(tab=>(
-            <button key={tab} onClick={()=>setRightTab(tab)} className={`flex-1 py-2 text-[9px] uppercase tracking-wider font-bold transition-colors ${rightTab===tab?"bg-red-900/20 text-red-300 border-b-2 border-red-600":"text-zinc-600 hover:text-zinc-300"}`}>
-              {tab==="text"?"✏️ Text":tab==="overlay"?"🎭 Overlay":"🔊 Sound"}
-            </button>))}
-        </div>
+  {(["text","overlay","sound"] as const).map(tab=>(
+    <button key={tab} onClick={()=>setRightTab(tab)} className={`flex-1 py-2 text-[9px] uppercase tracking-wider font-bold transition-colors ${rightTab===tab?"bg-red-900/20 text-red-300 border-b-2 border-red-600":"text-zinc-600 hover:text-zinc-300"}`}>
+      {tab==="text"?"✏️ Text":tab==="overlay"?"🎭 Overlay":"🔊 Sound"}
+    </button>))}
+</div>
         <div className="p-3">
           {/* TEXT TAB */}
           {rightTab==="text"&&sl&&(
@@ -1345,44 +1341,151 @@ const convertToMp4 = async (webmBlob: Blob, recName: string) => {
           {rightTab==="text"&&!sl&&<p className="text-[10px] text-zinc-600 text-center py-4">Select a text layer to edit</p>}
 
           {/* OVERLAY TAB */}
-          {rightTab==="overlay"&&(
-            <div className="space-y-3">
-              <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold">Overlay Controls</h2>
-              {selectedOverlayInstance?(()=>{
-                const ov=activeOverlays.find(o=>o.instanceId===selectedOverlayInstance);
-                if(!ov)return <p className="text-[10px] text-zinc-600">Overlay not found</p>;
-                const co=customOverlays.find(c=>`custom:${c.id}`===ov.defId);
-                const isVid=co?.isVideo;
-                return(
-                  <div className="space-y-2">
-                    <div className="text-xs text-purple-300 font-medium">{ov.emoji} {ov.label}</div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Opacity: <span className="text-zinc-300">{Math.round((ov.opacity??1)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.opacity??1)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{opacity:Number(e.target.value)/100})} className="w-full accent-purple-600"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Scale: <span className="text-zinc-300">{ov.scale.toFixed(2)}</span></label><input type="range" min={0.1} max={3} step={0.05} value={ov.scale} onChange={e=>updateOverlayProp(ov.instanceId,{scale:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Rotation: <span className="text-zinc-300">{Math.round((ov.rotation||0)*180/Math.PI)}°</span></label><input type="range" min={-180} max={180} value={Math.round((ov.rotation||0)*180/Math.PI)} onChange={e=>updateOverlayProp(ov.instanceId,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-purple-600"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Pos X: <span className="text-zinc-300">{Math.round((ov.posX||0.5)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.posX||0.5)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{posX:Number(e.target.value)/100})} className="w-full accent-purple-600"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Pos Y: <span className="text-zinc-300">{Math.round((ov.posY||0.5)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.posY||0.5)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{posY:Number(e.target.value)/100})} className="w-full accent-purple-600"/></div>
-                    {isVid&&<>
-                      <div><label className="text-[9px] text-zinc-500 block mb-0.5">Video Opacity: <span className="text-zinc-300">{Math.round((ov.videoOpacity??1)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.videoOpacity??1)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{videoOpacity:Number(e.target.value)/100})} className="w-full accent-blue-500"/></div>
-                      <div><label className="text-[9px] text-zinc-500 block mb-0.5">Fit</label><select value={ov.videoFit||"cover"} onChange={e=>updateOverlayProp(ov.instanceId,{videoFit:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select></div>
-                    </>}
-                    <button onClick={()=>removeOverlay(ov.instanceId)} className="w-full py-1 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-xs hover:bg-red-900/50">🗑 Remove Overlay</button>
-                    <p className="text-[9px] text-zinc-600 leading-relaxed">Drag on canvas to reposition. Use scale slider or drag bottom-right handle to resize.</p>
-                  </div>);
-              })():<p className="text-[10px] text-zinc-600 py-4 text-center">Click an overlay on canvas<br/>or select from the Overlays panel below</p>}
-            </div>)}
+{rightTab==="overlay"&&(
+  <div className="space-y-3">
+    <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold">🎭 Overlays</h2>
 
-          {/* SOUND TAB */}
-          {rightTab==="sound"&&(
-            <div className="space-y-2">
-              <h2 className="text-[10px] text-green-400 uppercase tracking-widest font-bold">Sound Controls</h2>
-              {activeSounds.length>0?activeSounds.map(s=>(
-                <div key={s.id} className="p-2 rounded border border-green-900/30 bg-green-900/10">
-                  <div className="flex items-center gap-1.5 mb-1"><span className="text-sm">{s.emoji}</span><span className="text-xs text-green-300 flex-1 truncate">{s.name}</span><button onClick={()=>toggleSound(s)} className="text-red-400 text-xs">×</button></div>
-                  <div className="flex items-center gap-2"><span className="text-[9px] text-zinc-500">Vol</span><input type="range" min={0} max={100} value={Math.round(s.volume*100)} onChange={e=>updateSoundVolume(s.id,Number(e.target.value)/100)} className="flex-1 accent-green-500"/><span className="text-[9px] text-zinc-400 w-6">{Math.round(s.volume*100)}</span></div>
-                </div>)):
-                <p className="text-[10px] text-zinc-600 py-4 text-center">No sounds playing.<br/>Open Sounds panel to add.</p>}
-              <button onClick={()=>setShowSoundPanel(true)} className="w-full py-1.5 rounded border border-green-700/30 text-green-400 text-xs hover:bg-green-900/20">🎵 Open Sound Library</button>
-            </div>)}
+    {activeOverlays.length>0&&(
+      <div className="pb-2 border-b border-zinc-800/30">
+        <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1.5">Active ({activeOverlays.length})</div>
+        <div className="flex flex-wrap gap-1">
+          {activeOverlays.map(ov=>(
+            <div key={ov.instanceId} className={`flex items-center gap-1 px-2 py-1 rounded text-xs border cursor-pointer transition-all ${editingOverlay===ov.instanceId?"bg-purple-900/50 border-purple-500/60 text-purple-200":"bg-zinc-800/50 border-zinc-700/30 text-zinc-300 hover:border-purple-700/40"}`}>
+              <span onClick={()=>{setEditingOverlay(ov.instanceId===editingOverlay?null:ov.instanceId);setSelectedOverlayInstance(ov.instanceId);}}>{ov.emoji} {ov.label}</span>
+              <button onClick={()=>removeOverlay(ov.instanceId)} className="text-zinc-600 hover:text-red-400 ml-1">×</button>
+            </div>))}
+        </div>
+      </div>)}
+
+    {selectedOverlayInstance?(()=>{
+      const ov=activeOverlays.find(o=>o.instanceId===selectedOverlayInstance);
+      if(!ov)return <p className="text-[10px] text-zinc-600">Overlay not found</p>;
+      const co=customOverlays.find(c=>`custom:${c.id}`===ov.defId);
+      const isEditOvVid=ov.defId.startsWith("custom:")&&co?.isVideo;
+      return(
+        <div className="space-y-2">
+          <div className="text-xs text-purple-300 font-medium">{ov.emoji} {ov.label}</div>
+          <div><label className="text-[9px] text-zinc-500 block mb-0.5">Opacity: <span className="text-zinc-300">{Math.round((ov.opacity??1)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.opacity??1)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{opacity:Number(e.target.value)/100})} className="w-full accent-purple-600"/></div>
+          <div><label className="text-[9px] text-zinc-500 block mb-0.5">Scale: <span className="text-zinc-300">{ov.scale.toFixed(2)}</span></label><input type="range" min={0.1} max={3} step={0.05} value={ov.scale} onChange={e=>updateOverlayProp(ov.instanceId,{scale:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
+          <div><label className="text-[9px] text-zinc-500 block mb-0.5">Rotation: <span className="text-zinc-300">{Math.round((ov.rotation||0)*180/Math.PI)}°</span></label><input type="range" min={-180} max={180} value={Math.round((ov.rotation||0)*180/Math.PI)} onChange={e=>updateOverlayProp(ov.instanceId,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-purple-600"/></div>
+          <div><label className="text-[9px] text-zinc-500 block mb-0.5">Pos X: <span className="text-zinc-300">{Math.round((ov.posX||0.5)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.posX||0.5)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{posX:Number(e.target.value)/100})} className="w-full accent-purple-600"/></div>
+          <div><label className="text-[9px] text-zinc-500 block mb-0.5">Pos Y: <span className="text-zinc-300">{Math.round((ov.posY||0.5)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.posY||0.5)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{posY:Number(e.target.value)/100})} className="w-full accent-purple-600"/></div>
+          {isEditOvVid&&<>
+            <div><label className="text-[9px] text-zinc-500 block mb-0.5">Video Opacity: <span className="text-zinc-300">{Math.round((ov.videoOpacity??1)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.videoOpacity??1)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{videoOpacity:Number(e.target.value)/100})} className="w-full accent-blue-500"/></div>
+            <div><label className="text-[9px] text-zinc-500 block mb-0.5">Fit</label><select value={ov.videoFit||"cover"} onChange={e=>updateOverlayProp(ov.instanceId,{videoFit:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select></div>
+          </>}
+          {!isEditOvVid&&<>
+            <div><label className="text-[9px] text-zinc-500 block mb-0.5">Count: <span className="text-zinc-300">{ov.params.count}</span></label><input type="range" min={1} max={500} value={ov.params.count} onChange={e=>updateOverlayParams(ov.instanceId,{count:Number(e.target.value)})} className="w-full accent-purple-600"/></div>
+            <div><label className="text-[9px] text-zinc-500 block mb-0.5">Direction</label><select value={ov.params.direction} onChange={e=>updateOverlayParams(ov.instanceId,{direction:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"><option value="top">⬇ Top</option><option value="bottom">⬆ Bottom</option><option value="left">➡ Left</option><option value="right">⬅ Right</option><option value="random">🔀 Random</option></select></div>
+            <div><label className="text-[9px] text-zinc-500 block mb-0.5">Size: <span className="text-zinc-300">{ov.params.sizeMin}–{ov.params.sizeMax}</span></label><div className="flex gap-1"><input type="range" min={1} max={300} value={ov.params.sizeMin} onChange={e=>updateOverlayParams(ov.instanceId,{sizeMin:Number(e.target.value)})} className="flex-1 accent-purple-600"/><input type="range" min={1} max={400} value={ov.params.sizeMax} onChange={e=>updateOverlayParams(ov.instanceId,{sizeMax:Number(e.target.value)})} className="flex-1 accent-purple-600"/></div></div>
+            <div><label className="text-[9px] text-zinc-500 block mb-0.5">Speed: <span className="text-zinc-300">{ov.params.speedMin}–{ov.params.speedMax}</span></label><div className="flex gap-1"><input type="range" min={0.1} max={30} step={0.1} value={ov.params.speedMin} onChange={e=>updateOverlayParams(ov.instanceId,{speedMin:Number(e.target.value)})} className="flex-1 accent-purple-600"/><input type="range" min={0.1} max={40} step={0.1} value={ov.params.speedMax} onChange={e=>updateOverlayParams(ov.instanceId,{speedMax:Number(e.target.value)})} className="flex-1 accent-purple-600"/></div></div>
+            <div><label className="text-[9px] text-zinc-500 block mb-0.5">Alpha: <span className="text-zinc-300">{ov.params.alphaMin.toFixed(2)}–{ov.params.alphaMax.toFixed(2)}</span></label><div className="flex gap-1"><input type="range" min={0} max={1} step={0.01} value={ov.params.alphaMin} onChange={e=>updateOverlayParams(ov.instanceId,{alphaMin:Number(e.target.value)})} className="flex-1 accent-purple-600"/><input type="range" min={0} max={1} step={0.01} value={ov.params.alphaMax} onChange={e=>updateOverlayParams(ov.instanceId,{alphaMax:Number(e.target.value)})} className="flex-1 accent-purple-600"/></div></div>
+            <div className="flex items-center gap-2"><label className="text-[9px] text-zinc-500 uppercase">Rotate</label><button onClick={()=>updateOverlayParams(ov.instanceId,{rotate:!ov.params.rotate})} className={`px-3 py-0.5 rounded text-xs border ${ov.params.rotate?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-500"}`}>{ov.params.rotate?"On":"Off"}</button></div>
+          </>}
+          <button onClick={()=>removeOverlay(ov.instanceId)} className="w-full py-1 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-xs hover:bg-red-900/50">🗑 Remove</button>
+        </div>);
+    })():<p className="text-[10px] text-zinc-600 py-2 text-center">Koi overlay select nahi</p>}
+
+    <div className="pt-2 border-t border-zinc-800/30">
+      <div className="flex items-center gap-1 mb-2 flex-wrap">
+        <div className="text-[9px] text-zinc-500 uppercase tracking-wider w-full mb-1">Add Overlay</div>
+        <button onClick={()=>setShowAddCustom(v=>!v)} className="px-2 py-0.5 rounded bg-green-900/30 border border-green-700/40 text-green-300 text-[9px] hover:bg-green-900/50">+ Image/GIF</button>
+        <button onClick={()=>{setShowAddCustom(true);setPendingIsVideo(true);setTimeout(()=>customVideoRef.current?.click(),100);}} className="px-2 py-0.5 rounded bg-blue-900/30 border border-blue-700/40 text-blue-300 text-[9px] hover:bg-blue-900/50">+ Video</button>
+      </div>
+      {showAddCustom&&(
+        <div className="mb-2 p-2 rounded border border-green-900/40 bg-[#060c06] space-y-1.5">
+          <input type="text" placeholder="Name" value={newCustomName} onChange={e=>setNewCustomName(e.target.value)} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
+          <input type="text" placeholder="Category" value={newCustomCategory} onChange={e=>setNewCustomCategory(e.target.value)} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none"/>
+          <input ref={customUploadRef} type="file" accept="image/*,image/gif,video/*" className="hidden" onChange={handleCustomUpload}/>
+          <input ref={customVideoRef} type="file" accept="video/*" className="hidden" onChange={handleCustomVideoUpload}/>
+          <button onClick={()=>customUploadRef.current?.click()} className="w-full py-1 rounded bg-zinc-800/60 border border-dashed border-zinc-600/50 text-xs text-zinc-400 hover:border-green-700/50">
+            {pendingCustomFile?"✅ Ready":"📁 Choose File"}
+          </button>
+          {pendingCustomFile&&<div className="flex gap-1">
+            <button onClick={finalizeCustomOverlay} className="flex-1 py-1 rounded bg-green-900/40 border border-green-700/40 text-green-300 text-xs font-bold">💾 Add</button>
+            <button onClick={()=>{setPendingCustomFile(null);setShowAddCustom(false);setPendingIsVideo(false);}} className="px-2 py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-zinc-400 text-xs">✕</button>
+          </div>}
+        </div>)}
+      <div className="flex gap-1 flex-wrap mb-1.5">
+        {OVERLAY_CATEGORIES.map(cat=>(<button key={cat} onClick={()=>setOverlayCategory(cat)} className={`px-1.5 py-0.5 rounded text-[9px] border transition-all ${overlayCategory===cat?"bg-purple-900/40 border-purple-700/40 text-purple-300":"border-zinc-700/30 text-zinc-400 hover:text-zinc-200"}`}>{cat}</button>))}
+      </div>
+      <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
+        {filteredOverlays.map((o:any)=>(
+          <button key={o.id} onClick={()=>o.id.startsWith("custom:")?addCustomOverlay(customOverlays.find(c=>`custom:${c.id}`===o.id)!):addOverlay(o.id)} className="px-2 py-1.5 rounded text-[10px] border border-zinc-800/40 text-zinc-400 hover:border-purple-700/40 hover:text-purple-300 hover:bg-purple-900/20 transition-all text-left">
+            {o.emoji} {o.label}
+          </button>))}
+      </div>
+    </div>
+  </div>)}
+
+         {/* SOUND TAB */}
+{rightTab==="sound"&&(
+  <div className="space-y-2">
+    <h2 className="text-[10px] text-green-400 uppercase tracking-widest font-bold">🔊 Sound Controls</h2>
+
+    {/* Active sounds */}
+    {activeSounds.length>0&&(
+      <div className="pb-2 border-b border-zinc-800/30">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="text-[9px] text-green-400 uppercase tracking-wider">Playing ({activeSounds.length})</div>
+          <button onClick={stopAllSounds} className="px-2 py-0.5 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-[9px]">⏹ Stop All</button>
+        </div>
+        {activeSounds.map(s=>(
+          <div key={s.id} className="flex items-center gap-2 px-2 py-1 mb-1 rounded bg-green-900/20 border border-green-700/30">
+            <span className="text-sm">{s.emoji}</span>
+            <span className="text-[10px] text-green-300 flex-1 truncate">{s.name}</span>
+            <input type="range" min={0} max={100} value={Math.round(s.volume*100)} onChange={e=>updateSoundVolume(s.id,Number(e.target.value)/100)} className="w-16 accent-green-500"/>
+            <button onClick={()=>toggleSound(s)} className="text-red-400 hover:text-red-300 text-xs">×</button>
+          </div>))}
+      </div>)}
+
+    {/* TTS */}
+    <div className="pb-2 border-b border-zinc-800/30">
+      <div className="text-[10px] text-green-400 uppercase tracking-wider mb-1.5 font-bold">🗣️ Text-to-Speech</div>
+      <textarea value={ttsText} onChange={e=>setTtsText(e.target.value)} rows={2} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none resize-none mb-1.5" placeholder="Type text to speak..."/>
+      <div className="grid grid-cols-2 gap-1.5 mb-1.5">
+        <div className="col-span-2">
+          <label className="text-[9px] text-zinc-500 block mb-0.5">Voice</label>
+          <select value={ttsVoice} onChange={e=>setTtsVoice(e.target.value)} className="w-full px-1.5 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-300 focus:outline-none">
+            {availableVoices.map(v=>(<option key={v.name} value={v.name}>{v.name}</option>))}
+          </select>
+        </div>
+        <div>
+          <label className="text-[9px] text-zinc-500 block mb-0.5">Rate: {ttsRate.toFixed(1)}</label>
+          <input type="range" min={0.5} max={2} step={0.1} value={ttsRate} onChange={e=>setTtsRate(Number(e.target.value))} className="w-full accent-green-500"/>
+        </div>
+        <div>
+          <label className="text-[9px] text-zinc-500 block mb-0.5">Pitch: {ttsPitch.toFixed(1)}</label>
+          <input type="range" min={0.5} max={2} step={0.1} value={ttsPitch} onChange={e=>setTtsPitch(Number(e.target.value))} className="w-full accent-green-500"/>
+        </div>
+      </div>
+      <button onClick={playTTS} className={`w-full py-1.5 rounded text-xs font-bold border transition-all ${ttsPlaying?"bg-red-900/40 border-red-700/40 text-red-300":"bg-green-900/30 border-green-700/40 text-green-300 hover:bg-green-900/50"}`}>
+        {ttsPlaying?"⏹ Stop":"▶ Speak"}
+      </button>
+    </div>
+
+    {/* Sound Library */}
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-[10px] text-green-400 uppercase tracking-wider font-bold">🎵 Library</div>
+        <div><input ref={soundUploadRef} type="file" accept="audio/*" className="hidden" onChange={handleSoundUpload}/><button onClick={()=>soundUploadRef.current?.click()} className="px-2 py-0.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-[9px] text-zinc-400 hover:text-zinc-200">+ Upload</button></div>
+      </div>
+      <div className="flex gap-1 flex-wrap mb-1.5">
+        {soundCategories.map(cat=>(<button key={cat} onClick={()=>setSoundCategory(cat)} className={`px-1.5 py-0.5 rounded text-[9px] border transition-all ${soundCategory===cat?"bg-green-900/40 border-green-700/40 text-green-300":"border-zinc-700/30 text-zinc-400 hover:text-zinc-200"}`}>{cat}</button>))}
+      </div>
+      <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto">
+        {filteredSounds.map(s=>{
+          const isActive=activeSounds.some(a=>a.id===s.id);
+          const hasAudio=!!(s.dataUrl||s.url);
+          return(
+            <button key={s.id} onClick={()=>toggleSound(s)} disabled={!hasAudio&&!s.isCustom} className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] border transition-all text-left ${isActive?"bg-green-900/40 border-green-700/50 text-green-200":"border-zinc-800/40 text-zinc-400 hover:border-green-700/40 hover:text-green-300 hover:bg-green-900/20"} ${!hasAudio&&!s.isCustom?"opacity-40 cursor-not-allowed":""}`}>
+              <span>{s.emoji}</span>
+              <div className="min-w-0"><div className="truncate">{s.name}</div></div>
+              {isActive&&<span className="ml-auto text-green-400 text-[8px]">▶</span>}
+            </button>);})}
+      </div>
+    </div>
+  </div>)}
 
           {/* Template info at bottom */}
           {rightTab==="text"&&(
