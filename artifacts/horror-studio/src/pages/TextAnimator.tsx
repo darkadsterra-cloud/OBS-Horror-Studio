@@ -1091,6 +1091,7 @@ const convertToMp4 = async (webmBlob: Blob, recName: string) => {
     )}
   </div>
 )}
+        </div>
 
       {/* ── Right Sidebar ── */}
       <aside className="w-60 flex-shrink-0 border-l border-red-900/20 bg-[#050508] flex flex-col overflow-y-auto">
