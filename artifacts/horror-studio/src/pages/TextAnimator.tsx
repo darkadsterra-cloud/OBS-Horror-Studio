@@ -7,7 +7,6 @@ import {
   type OverlayDef, type OverlayParticle, type OverlayParams, type CustomOverlay, DEFAULT_PARAMS
 } from "@/data/overlays";
 
-// ─── Canvas Sizes ────────────────────────────────────────────────────────
 const CANVAS_PRESETS = [
   { label:"[Standard] 1920×1080 — Full HD",       w:1920, h:1080 },
   { label:"[2K] 2560×1440 — 2K QHD",              w:2560, h:1440 },
@@ -55,7 +54,6 @@ const FONT_OPTIONS = [
   "Impact","Arial Black","Georgia","Verdana","Tahoma","Trebuchet MS",
 ];
 
-// ─── Sound Library ────────────────────────────────────────────────────────
 interface SoundTrack {
   id: string;
   name: string;
@@ -91,7 +89,6 @@ const BUILTIN_SOUNDS: Omit<SoundTrack,"volume"|"loop">[] = [
   { id:"cinematic-hit",name:"Cinematic Hit",category:"Music",emoji:"🎬" },
 ];
 
-// ─── Text Layer ─────────────────────────────────────────────────────────
 interface TextLayer {
   id:string; text:string; x:number; y:number;
   fontSize:number; fontFamily:string; color:string;
@@ -108,7 +105,6 @@ function makeLayer(p:Partial<TextLayer>={}):TextLayer {
   return {id:Math.random().toString(36).slice(2),text:"STARTING SOON",x:0.5,y:0.5,fontSize:120,fontFamily:"Creepster",color:"#cc0000",bold:false,italic:false,underline:false,align:"center",opacity:1,rotation:0,strokeColor:"#000000",strokeWidth:2,shadowEnabled:false,shadowColor:"#000000",shadowBlur:5,glowEnabled:false,glowColor:"#ff0000",letterSpacing:0,animation:"none",_w:0,_h:0,...p};
 }
 
-// ─── Active Overlay Instance ───────────────────────────────────────────────────
 interface ActiveOverlay {
   instanceId: string;
   defId: string;
@@ -126,7 +122,6 @@ interface ActiveOverlay {
   videoMuted?: boolean;
 }
 
-// ─── Project State ────────────────────────────────────────────────────────
 interface ProjectState {
   version: number;
   canvasPreset: { w:number; h:number; label:string };
@@ -169,15 +164,12 @@ function hitTestLayer(l:TextLayer,cx:number,cy:number,W:number,H:number):boolean
 }
 
 function hitTestOverlay(ov:ActiveOverlay,cx:number,cy:number,W:number,H:number):boolean {
-  if(ov.defId.startsWith("custom:")) {
-    return true;
-  }
+  if(ov.defId.startsWith("custom:")) return true;
   const ox=ov.posX*W, oy=ov.posY*H;
   const halfW=W*0.45*ov.scale, halfH=H*0.45*ov.scale;
   return cx>=ox-halfW&&cx<=ox+halfW&&cy>=oy-halfH&&cy<=oy+halfH;
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────
 export default function TextAnimator() {
   const [selectedTemplate,setSelectedTemplate] = useState<TemplateData>(PRESET_TEMPLATES[0]);
   const [activeCategory,setActiveCategory]     = useState("All");
@@ -281,14 +273,10 @@ export default function TextAnimator() {
     audioElsRef.current={};setActiveSounds([]);
   };
 
-  const allSoundTracks: SoundTrack[] = [
-    ...BUILTIN_SOUNDS.map(s=>({...s,volume:0.7,loop:true})),
-    ...customSounds,
-  ];
+  const allSoundTracks: SoundTrack[] = [...BUILTIN_SOUNDS.map(s=>({...s,volume:0.7,loop:true})),...customSounds];
   const soundCategories=["All","Horror","Nature","Gaming","Music","Custom"];
   const filteredSounds=allSoundTracks.filter(s=>soundCategory==="All"||s.category===soundCategory);
 
-  // ── Recording ───────────────────────────────────────────────────────────
   const [recording,setRecording]     = useState(false);
   const [recordingTime,setRecordingTime] = useState(0);
   const [recordings,setRecordings]   = useState<Array<{name:string;url:string;size:number}>>([]);
@@ -300,7 +288,6 @@ export default function TextAnimator() {
   const audioDestRef     = useRef<MediaStreamAudioDestinationNode|null>(null);
   const audioSourceRef   = useRef<MediaElementAudioSourceNode|null>(null);
 
-  // ── Canvas / Render ──────────────────────────────────────────────────────
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
   const layersRef    = useRef(layers);
@@ -368,15 +355,9 @@ export default function TextAnimator() {
     const instanceId = Math.random().toString(36).slice(2);
     const isVideo = co.isVideo;
     const newOv:ActiveOverlay = {
-      instanceId,
-      defId:`custom:${co.id}`,
-      label:co.name,emoji:isVideo?"🎬":"🖼️",
+      instanceId,defId:`custom:${co.id}`,label:co.name,emoji:isVideo?"🎬":"🖼️",
       params:{count:co.count,direction:co.direction,sizeMin:co.sizeMin,sizeMax:co.sizeMax,speedMin:co.speedMin,speedMax:co.speedMax,alphaMin:co.alphaMin,alphaMax:co.alphaMax,rotate:co.rotate},
-      posX:0.5,posY:0.5,scale:1,rotation:0,opacity:1,
-      videoOpacity:co.videoOpacity??1,
-      videoFit:co.videoFit??"cover",
-      videoLoop:co.videoLoop!==false,
-      videoMuted:co.videoMuted!==false,
+      posX:0.5,posY:0.5,scale:1,rotation:0,opacity:1,videoOpacity:co.videoOpacity??1,videoFit:co.videoFit??"cover",videoLoop:co.videoLoop!==false,videoMuted:co.videoMuted!==false,
     };
     overlayParticlesRef.current[instanceId] = isVideo ? [] : initCustomParticles(presetRef.current.w,presetRef.current.h,co);
     setActiveOverlays(prev=>[...prev,newOv]);
@@ -445,16 +426,9 @@ export default function TextAnimator() {
   const finalizeCustomOverlay = () => {
     if(!pendingCustomFile||!newCustomName.trim())return;
     const co:CustomOverlay = {
-      id:Math.random().toString(36).slice(2),
-      name:newCustomName.trim(),
-      category:newCustomCategory||"Custom",
-      dataUrl:pendingCustomFile,
-      isGif:pendingIsGif,
-      isVideo:pendingIsVideo,
-      count:60,direction:"top",
-      sizeMin:20,sizeMax:60,speedMin:1,speedMax:4,
-      alphaMin:0.7,alphaMax:1,rotate:true,
-      videoOpacity:1,videoFit:"cover",videoLoop:true,videoMuted:true,
+      id:Math.random().toString(36).slice(2),name:newCustomName.trim(),category:newCustomCategory||"Custom",dataUrl:pendingCustomFile,
+      isGif:pendingIsGif,isVideo:pendingIsVideo,count:60,direction:"top",sizeMin:20,sizeMax:60,speedMin:1,speedMax:4,
+      alphaMin:0.7,alphaMax:1,rotate:true,videoOpacity:1,videoFit:"cover",videoLoop:true,videoMuted:true,
     };
     setCustomOverlays(prev=>[...prev,co]);
     setPendingCustomFile(null);setNewCustomName("");setShowAddCustom(false);setPendingIsVideo(false);
@@ -462,11 +436,7 @@ export default function TextAnimator() {
   };
 
   const saveProject = () => {
-    const state:ProjectState = {
-      version:1,canvasPreset,
-      layers:layers.map(({_w,_h,...rest})=>rest),
-      activeOverlays,customOverlays,bgColor:"#000000",
-    };
+    const state:ProjectState = {version:1,canvasPreset,layers:layers.map(({_w,_h,...rest})=>rest),activeOverlays,customOverlays,bgColor:"#000000"};
     const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`horror-project-${Date.now()}.json`;a.click();
   };
@@ -520,34 +490,34 @@ export default function TextAnimator() {
 
     const getAnim=(anim:string,t:number,W:number,H:number)=>{
       let ox=0,oy=0,sc=1,al=1,er=0;
-      if(anim==="float")  oy=Math.sin(t*1.5)*(H*0.03);
-      else if(anim==="bounce") oy=-Math.abs(Math.sin(t*3))*(H*0.06);
+      if(anim==="float")oy=Math.sin(t*1.5)*(H*0.03);
+      else if(anim==="bounce")oy=-Math.abs(Math.sin(t*3))*(H*0.06);
       else if(anim==="shake"){ox=(Math.random()-0.5)*12;oy=(Math.random()-0.5)*6;}
-      else if(anim==="flicker") al=Math.random()>0.1?1:(Math.random()>0.5?0.3:0);
-      else if(anim==="zoom-pulse") sc=1+Math.sin(t*3)*0.1;
-      else if(anim==="neon-pulse") al=0.7+(Math.sin(t*4)+1)/2*0.3;
-      else if(anim==="wobble") er=Math.sin(t*4)*0.15;
-      else if(anim==="heartbeat") sc=1+Math.abs(Math.sin(t*4))*0.15;
+      else if(anim==="flicker")al=Math.random()>0.1?1:(Math.random()>0.5?0.3:0);
+      else if(anim==="zoom-pulse")sc=1+Math.sin(t*3)*0.1;
+      else if(anim==="neon-pulse")al=0.7+(Math.sin(t*4)+1)/2*0.3;
+      else if(anim==="wobble")er=Math.sin(t*4)*0.15;
+      else if(anim==="heartbeat")sc=1+Math.abs(Math.sin(t*4))*0.15;
       else if(anim==="levitate"){oy=Math.sin(t*2)*(H*0.02);sc=1+Math.sin(t*2)*0.02;}
-      else if(anim==="spin") er=t*2;
+      else if(anim==="spin")er=t*2;
       else if(anim==="cinematic-fade"){const c=(t%4)/4;al=c<0.25?c*4:c<0.75?1:(1-c)*4;}
       else if(anim==="slide-left"){const c=(t*0.5)%2;ox=c<1?W*(1-c*2):0;}
       else if(anim==="slide-right"){const c=(t*0.5)%2;ox=c<1?-W*(1-c*2):0;}
       else if(anim==="slide-up"){const c=(t*0.5)%2;oy=c<1?H*(1-c*2):0;}
-      else if(anim==="fade-in") al=(Math.sin(t*0.5)+1)*0.5;
-      else if(anim==="zoom-in") sc=0.5+((Math.sin(t*0.5)+1)*0.5)*0.5;
-      else if(anim==="swing") er=Math.sin(t*3)*0.2;
+      else if(anim==="fade-in")al=(Math.sin(t*0.5)+1)*0.5;
+      else if(anim==="zoom-in")sc=0.5+((Math.sin(t*0.5)+1)*0.5)*0.5;
+      else if(anim==="swing")er=Math.sin(t*3)*0.2;
       else if(anim==="tada"){sc=1+Math.abs(Math.sin(t*6))*0.1;er=Math.sin(t*8)*0.05;}
-      else if(anim==="wiggle") ox=Math.sin(t*8)*8;
-      else if(anim==="breathe") sc=0.95+Math.sin(t*1.5)*0.05;
-      else if(anim==="flash") al=Math.round(Math.sin(t*6)*0.5+0.5);
+      else if(anim==="wiggle")ox=Math.sin(t*8)*8;
+      else if(anim==="breathe")sc=0.95+Math.sin(t*1.5)*0.05;
+      else if(anim==="flash")al=Math.round(Math.sin(t*6)*0.5+0.5);
       else if(anim==="spin-reveal"){const c=(t*0.5)%Math.PI;sc=Math.abs(Math.cos(c));al=0.3+sc*0.7;}
-      else if(anim==="elastic") sc=1+Math.sin(t*8)*Math.exp(-t*0.5)*0.3;
+      else if(anim==="elastic")sc=1+Math.sin(t*8)*Math.exp(-t*0.5)*0.3;
       else if(anim==="cursed"){ox=(Math.random()-0.5)*6;oy=(Math.random()-0.5)*4;er=(Math.random()-0.5)*0.1;}
       else if(anim==="possessed"){ox=(Math.random()-0.5)*15;er=(Math.random()-0.5)*0.2;al=0.7+Math.random()*0.3;}
-      else if(anim==="phantom") al=0.3+Math.abs(Math.sin(t*1.5))*0.5;
+      else if(anim==="phantom")al=0.3+Math.abs(Math.sin(t*1.5))*0.5;
       else if(anim==="void"){sc=1+Math.sin(t*0.5)*0.08;al=0.6+Math.sin(t*2)*0.2;}
-      else if(anim==="gold-shine") al=0.8+Math.sin(t*4)*0.2;
+      else if(anim==="gold-shine")al=0.8+Math.sin(t*4)*0.2;
       else if(anim==="ice-glow"){sc=1+Math.sin(t*2)*0.03;al=0.85+Math.sin(t*3)*0.1;}
       return {ox,oy,sc,al,er};
     };
@@ -588,7 +558,6 @@ export default function TextAnimator() {
         const ly=li*lineH-totalH/2;
         if(l.strokeWidth>0){ctx.strokeStyle=l.strokeColor;ctx.lineWidth=l.strokeWidth;ctx.lineJoin="round";ctx.strokeText(line,0,ly);}
         ctx.fillStyle=fillCol;ctx.fillText(line,0,ly);
-        if(l.underline){const m=ctx.measureText(line);const uw=m.width;let ux=0;if(l.align==="center")ux=-uw/2;if(l.align==="right")ux=-uw;ctx.save();ctx.shadowBlur=0;ctx.strokeStyle=fillCol;ctx.lineWidth=1;ctx.strokeRect(ux,-fs*0.15,uw,fs*0.1);ctx.restore();}
       });
       if(anim==="blood-drip"){const approxW=fs*l.text.length*0.5;for(let i=0;i<5;i++){const dx=-approxW*0.5+i*(approxW/4);const dy=((t*80+i*37)%(400));ctx.fillStyle=`rgba(180,0,0,${0.6+Math.sin(t*2+i)*0.2})`;ctx.beginPath();ctx.arc(dx,dy-fs,2+Math.random()*2,0,Math.PI*2);ctx.fill();}}
       const m=ctx.measureText(l.text);l._w=m.width+Math.max(0,l.letterSpacing)*l.text.length;l._h=fs*1.4;
@@ -598,7 +567,6 @@ export default function TextAnimator() {
         ctx.save();ctx.translate(cx,cy);ctx.rotate(l.rotation);
         ctx.strokeStyle="rgba(255,60,60,0.85)";ctx.lineWidth=1.5;ctx.setLineDash([5,3]);ctx.strokeRect(-hw,-hh,hw*2,hh*2);ctx.setLineDash([]);
         [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].forEach(([hx,hy])=>{ctx.fillStyle="#fff";ctx.strokeStyle="#cc0000";ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(hx,hy,5,0,Math.PI*2);ctx.fill();ctx.stroke();});
-        ctx.strokeStyle="rgba(255,60,60,0.6)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,-hh);ctx.lineTo(0,-hh-25);ctx.stroke();ctx.fillStyle="#fff";ctx.strokeStyle="#cc0000";ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(0,-hh-25,4,0,Math.PI*2);ctx.fill();ctx.stroke();
         ctx.restore();
       }
     };
@@ -623,12 +591,11 @@ export default function TextAnimator() {
         if(!ps)return;
         ctx.save();
         ctx.globalAlpha=ov.opacity??1;
-
         if(ov.defId.startsWith("custom:")){
           const co=customOverlaysRef.current.find(c=>`custom:${c.id}`===ov.defId);
           if(!co){ctx.restore();return;}
           if(co.isVideo){
-            const ox=(ov.posX-0.5)*W, oy2=(ov.posY-0.5)*H;
+            const ox=(ov.posX-0.5)*W,oy2=(ov.posY-0.5)*H;
             if(ov.scale!==1||ox!==0||oy2!==0||ov.rotation!==0){
               ctx.translate(W/2+ox,H/2+oy2);
               ctx.rotate(ov.rotation||0);
@@ -660,12 +627,9 @@ export default function TextAnimator() {
           }
           def.draw(ctx,W,H,t,ps,ov.params);
         }
-
         if(selOvRef.current===ov.instanceId){
           ctx.setTransform(1,0,0,1,0,0);
           ctx.strokeStyle="rgba(150,100,255,0.9)";ctx.lineWidth=3;ctx.setLineDash([6,4]);ctx.strokeRect(10,10,W-20,H-20);ctx.setLineDash([]);
-          const hps=[[W/2,12],[W/2,H-12],[12,H/2],[W-12,H/2]];
-          hps.forEach(([hx,hy])=>{ctx.fillStyle="#fff";ctx.strokeStyle="#aa66ff";ctx.lineWidth=2;ctx.setLineDash([]);ctx.beginPath();ctx.arc(hx,hy,7,0,Math.PI*2);ctx.fill();ctx.stroke();});
         }
         ctx.restore();
       });
@@ -685,7 +649,6 @@ export default function TextAnimator() {
   const dragStartMouse=useRef({x:0,y:0}),dragStartPos=useRef({x:0,y:0});
   const resizing=useRef(false),resizeStartY=useRef(0),resizeStartSize=useRef(0);
   const rotating=useRef(false),rotateStartAngle=useRef(0),rotateStartRot=useRef(0),rotateCenter=useRef({x:0,y:0});
-
   const ovDragging=useRef(false),ovDragId=useRef<string|null>(null);
   const ovDragStartMouse=useRef({x:0,y:0}),ovDragStartPos=useRef({x:0,y:0});
   const ovResizing=useRef(false),ovResizeStartY=useRef(0),ovResizeStartScale=useRef(1);
@@ -693,7 +656,6 @@ export default function TextAnimator() {
 
   const handleCanvasMouseDown=(e:React.MouseEvent<HTMLCanvasElement>)=>{
     const {x,y}=toCanvas(e);const W=canvasPreset.w,H=canvasPreset.h;
-
     const selOv=activeOverlaysRef.current.find(o=>o.instanceId===selOvRef.current);
     if(selOv){
       if(Math.hypot(x-(W-12),y-(H-12))<20){
@@ -707,26 +669,21 @@ export default function TextAnimator() {
         ovRotateStartRot.current=selOv.rotation||0;return;
       }
     }
-
     if(selectedLayerId){
       const sel=layersRef.current.find(l=>l.id===selectedLayerId);
       if(sel){
         const cx=sel.x*W,cy=sel.y*H,hh=sel._h/2+10;
-        const rotHX=cx+Math.cos(sel.rotation-Math.PI/2)*(hh+25);const rotHY=cy+Math.sin(sel.rotation-Math.PI/2)*(hh+25);
-        if(Math.hypot(x-rotHX,y-rotHY)<12){rotating.current=true;rotateCenter.current={x:cx,y:cy};rotateStartAngle.current=Math.atan2(y-cy,x-cx);rotateStartRot.current=sel.rotation;return;}
         const hw=sel._w/2+10,cos=Math.cos(sel.rotation),sin=Math.sin(sel.rotation);
         const brX=cx+(hw*cos-hh*sin),brY=cy+(hw*sin+hh*cos);
         if(Math.hypot(x-brX,y-brY)<14){resizing.current=true;resizeStartY.current=y;resizeStartSize.current=sel.fontSize;dragId.current=sel.id;return;}
       }
     }
-
     const hitL=[...layersRef.current].reverse().find(l=>hitTestLayer(l,x,y,W,H));
     if(hitL){
       setSelectedLayerId(hitL.id);setSelectedOverlayInstance(null);
       dragging.current=true;dragId.current=hitL.id;dragStartMouse.current={x,y};dragStartPos.current={x:hitL.x,y:hitL.y};
       return;
     }
-
     const hitO=[...activeOverlaysRef.current].reverse().find(o=>hitTestOverlay(o,x,y,W,H));
     if(hitO){
       setSelectedOverlayInstance(hitO.instanceId);setSelectedLayerId(null);
@@ -735,7 +692,6 @@ export default function TextAnimator() {
       ovDragStartMouse.current={x,y};ovDragStartPos.current={x:hitO.posX,y:hitO.posY};
       return;
     }
-
     setSelectedLayerId(null);setSelectedOverlayInstance(null);
   };
 
@@ -748,11 +704,7 @@ export default function TextAnimator() {
       } else if(resizing.current&&dragId.current){
         const dy=y-resizeStartY.current;const ns=Math.max(8,Math.min(600,resizeStartSize.current+dy*0.5));
         updateLayer(dragId.current,{fontSize:Math.round(ns)});
-      } else if(rotating.current&&selectedIdRef.current){
-        const angle=Math.atan2(y-rotateCenter.current.y,x-rotateCenter.current.x);
-        updateLayer(selectedIdRef.current,{rotation:rotateStartRot.current+(angle-rotateStartAngle.current)});
-      }
-      else if(ovDragging.current&&ovDragId.current){
+      } else if(ovDragging.current&&ovDragId.current){
         const dx=x-ovDragStartMouse.current.x,dy=y-ovDragStartMouse.current.y;
         updateOverlayProp(ovDragId.current,{posX:Math.max(0,Math.min(1,ovDragStartPos.current.x+dx/W)),posY:Math.max(0,Math.min(1,ovDragStartPos.current.y+dy/H))});
       } else if(ovResizing.current&&ovDragId.current){
@@ -774,12 +726,10 @@ export default function TextAnimator() {
 
   const handleExportPng=()=>{const cv=canvasRef.current;if(!cv)return;const a=document.createElement("a");a.href=cv.toDataURL("image/png");a.download=`horror-overlay-${canvasPreset.w}x${canvasPreset.h}-${Date.now()}.png`;a.click();};
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 🔴 IMPROVED RECORDING FUNCTION - BETTER VIDEO QUALITY & 4K SUPPORT
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ★ IMPROVED RECORDING WITH 4K & BETTER QUALITY ★
   const startRecording=()=>{
     const cv=canvasRef.current;if(!cv)return;chunksRef.current=[];setRecordingTime(0);
-    const videoStream=cv.captureStream(60); // ✅ INCREASED from 30fps to 60fps for smoother motion
+    const videoStream=cv.captureStream(60);
     let finalStream=videoStream;
     const vid=bgVideoRef.current;
     if(vid&&!vid.muted){
@@ -792,62 +742,21 @@ export default function TextAnimator() {
         finalStream=new MediaStream([...videoStream.getVideoTracks(),...audioDestRef.current.stream.getAudioTracks()]);
       }catch(err){console.warn("Audio capture failed:",err);}
     }
-    
-    // ✅ IMPROVED CODEC SELECTION - Prioritize VP9 for better 4K support
     let mimeType="video/webm";
     if(MediaRecorder.isTypeSupported("video/webm;codecs=vp9")){
       mimeType="video/webm;codecs=vp9";
     } else if(MediaRecorder.isTypeSupported("video/webm;codecs=vp8")){
       mimeType="video/webm;codecs=vp8";
     }
-
-    // ✅ ENHANCED QUALITY SETTINGS
-    const recordingOptions = {
-      mimeType: mimeType,
-      videoBitsPerSecond: 25000000, // ✅ INCREASED from 8,000,000 to 25,000,000 bps (2-4K friendly)
-      audioBitsPerSecond: 256000,   // ✅ ADDED: Crystal clear audio at 256kbps
-    };
-
-    const mr=new MediaRecorder(finalStream, recordingOptions);
-    
-    mr.ondataavailable=(ev)=>{
-      if(ev.data.size>0){
-        chunksRef.current.push(ev.data);
-        // 📊 OPTIONAL: Log buffer size to monitor performance
-        const totalSize = chunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
-        console.log(`Recording buffer: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
-      }
-    };
-    
-    mr.onstop=()=>{
-      const blob=new Blob(chunksRef.current,{type:mimeType});
-      const url=URL.createObjectURL(blob);
-      const name=`rec-${Date.now()}.webm`;
-      setRecordings(prev=>[{name,url,size:blob.size},...prev]);
-    };
-    
-    // ✅ OPTIMIZED DATA FLUSHING - Request data every 1 second instead of on-demand
-    setTimeout(()=>{
-      mr.start(1000); // ✅ Flush data every 1 second for better buffer management
-      mediaRecorderRef.current=mr;
-      setRecording(true);
-      let el=0;
-      recTimerRef.current=setInterval(()=>{
-        el++;
-        setRecordingTime(el);
-        if(el>=5*60)stopRecording(); // 5 minute limit
-      },1000);
-    },400);
+    const mr=new MediaRecorder(finalStream,{mimeType,videoBitsPerSecond:25000000,audioBitsPerSecond:256000});
+    mr.ondataavailable=(ev)=>{if(ev.data.size>0)chunksRef.current.push(ev.data);};
+    mr.onstop=()=>{const blob=new Blob(chunksRef.current,{type:mimeType});const url=URL.createObjectURL(blob);const name=`rec-${Date.now()}.webm`;setRecordings(prev=>[{name,url,size:blob.size},...prev]);};
+    setTimeout(()=>{mr.start(1000);mediaRecorderRef.current=mr;setRecording(true);let el=0;recTimerRef.current=setInterval(()=>{el++;setRecordingTime(el);if(el>=5*60)stopRecording();},1000);},400);
   };
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   const stopRecording=()=>{
     if(recTimerRef.current){clearInterval(recTimerRef.current);recTimerRef.current=null;}
-    if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=="inactive"){
-      mediaRecorderRef.current.requestData?.();
-      setTimeout(()=>{if(mediaRecorderRef.current?.state!=="inactive")mediaRecorderRef.current?.stop();},150);
-    }
+    if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=="inactive"){mediaRecorderRef.current.requestData?.();setTimeout(()=>{if(mediaRecorderRef.current?.state!=="inactive")mediaRecorderRef.current?.stop();},150);}
     setRecording(false);
   };
 
@@ -862,7 +771,6 @@ export default function TextAnimator() {
 
   return (
     <div className="h-full flex overflow-hidden text-zinc-300">
-      {/* ── Left Sidebar ── */}
       <aside className="w-64 flex-shrink-0 border-r border-red-900/20 bg-[#050508] flex flex-col overflow-hidden">
         <div className="p-3 border-b border-red-900/20">
           <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-2" style={{fontFamily:"Cinzel"}}>Text Input</h2>
@@ -870,7 +778,6 @@ export default function TextAnimator() {
           <button onClick={()=>{const l=makeLayer({text:newText||"TEXT",fontFamily:FONT_OPTIONS[0],color:selectedTemplate.colors[0]});setLayers(p=>[...p,l]);setSelectedLayerId(l.id);}} className="w-full mt-1.5 py-1.5 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-xs font-bold hover:bg-red-900/50 transition-colors">+ Add Text Layer</button>
           <button onClick={handleSurprise} className="w-full mt-1.5 py-1.5 rounded bg-purple-900/20 border border-purple-700/30 text-purple-300 text-xs font-bold hover:bg-purple-900/40 transition-colors">🎲 Surprise Me</button>
         </div>
-        {/* Layers */}
         <div className="p-2 border-b border-red-900/20">
           <h2 className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1.5">Text Layers</h2>
           <div className="space-y-1 max-h-28 overflow-y-auto">
@@ -881,7 +788,6 @@ export default function TextAnimator() {
               </div>))}
           </div>
         </div>
-        {/* Template cats */}
         <div className="p-2 border-b border-red-900/20">
           <div className="flex flex-wrap gap-1">
             {categories.map(cat=>(<button key={cat} onClick={()=>setActiveCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] font-medium transition-all border ${activeCategory===cat?"bg-red-900/20 border-red-700/40 text-red-300":"border-zinc-800/40 text-zinc-600 hover:text-zinc-300"}`}>{cat}</button>))}
@@ -898,25 +804,22 @@ export default function TextAnimator() {
         </div>
       </aside>
 
-      {/* ── Center ── */}
       <div className="flex-1 flex flex-col p-3 overflow-hidden min-w-0">
         <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
           <h1 className="text-lg font-black text-purple-400" style={{fontFamily:"Cinzel"}}>TEXT OVERLAY ANIMATOR</h1>
           <div className="flex items-center gap-2 text-xs">
             <span className="text-zinc-600">Template:</span><span className="text-zinc-300">{selectedTemplate.name}</span>
-            {selectedOverlayInstance&&<span className="text-purple-300 text-[10px] border border-purple-700/40 px-1.5 py-0.5 rounded">Overlay selected — drag to move</span>}
+            {selectedOverlayInstance&&<span className="text-purple-300 text-[10px] border border-purple-700/40 px-1.5 py-0.5 rounded">Overlay selected</span>}
           </div>
         </div>
-        {/* Canvas size */}
         <div className="relative mb-2">
           <button onClick={()=>setShowSizeMenu(v=>!v)} className="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/40 text-xs text-zinc-300 hover:border-purple-700/30">
-            <span className="text-zinc-500 text-[10px]">📐</span><span className="flex-1 text-left truncate">{canvasPreset.label}</span><span className="text-zinc-500 text-[10px] font-mono">{canvasPreset.w}×{canvasPreset.h}</span>
+            <span>📐</span><span className="flex-1 text-left truncate">{canvasPreset.label}</span><span className="text-zinc-500 text-[10px] font-mono">{canvasPreset.w}×{canvasPreset.h}</span>
           </button>
           {showSizeMenu&&(<div className="absolute top-full left-0 mt-1 z-50 w-80 rounded border border-zinc-700/40 bg-[#0c0c16] shadow-xl max-h-72 overflow-y-auto">
             {CANVAS_PRESETS.map((p,i)=>(<button key={i} onClick={()=>{setCanvasPreset(p);setShowSizeMenu(false);}} className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between hover:bg-zinc-700/30 ${canvasPreset.label===p.label?"bg-zinc-700/50 text-purple-300":"text-zinc-400"}`}><span>{p.label}</span><span className="text-[9px] text-zinc-600">{p.w}×{p.h}</span></button>))}
           </div>)}
         </div>
-        {/* Canvas */}
         <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0">
           <div className="relative rounded border border-purple-900/30 overflow-hidden bg-[#05050a]" style={{aspectRatio:`${canvasPreset.w} / ${canvasPreset.h}`,maxWidth:"100%",maxHeight:"100%",boxShadow:"0 0 30px rgba(139,0,0,0.1)"}}>
             <canvas ref={canvasRef} style={{width:"100%",height:"100%",display:"block",cursor:"crosshair"}} onMouseDown={handleCanvasMouseDown}/>
@@ -924,308 +827,103 @@ export default function TextAnimator() {
             <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/60 border border-zinc-700/30 text-[9px] text-zinc-500 font-mono">{canvasPreset.w}×{canvasPreset.h}</div>
           </div>
         </div>
-        {/* Bottom controls */}
         <div className="flex items-center gap-2 mt-2 flex-wrap flex-shrink-0">
           <button onClick={handleExportPng} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-purple-700/30">📷 PNG</button>
-          <button onClick={recording?stopRecording:startRecording} className={`px-4 py-1.5 rounded text-xs font-bold border transition-all ${recording?"bg-red-600/30 border-red-500/50 text-red-300 animate-pulse":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-red-700/30"}`}>{recording?`◼ Stop Recording (${fmt(recordingTime)})`:"● Record"}</button>
+          <button onClick={recording?stopRecording:startRecording} className={`px-4 py-1.5 rounded text-xs font-bold border transition-all ${recording?"bg-red-600/30 border-red-500/50 text-red-300 animate-pulse":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-red-700/30"}`}>{recording?`◼ Stop (${fmt(recordingTime)})`:"● Record"}</button>
           <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload}/>
-          <button onClick={()=>bgFileRef.current?.click()} className={`px-3 py-1.5 rounded text-xs border transition-colors ${bgImage?"bg-green-900/20 border-green-700/40 text-green-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-green-700/30"}`}>🖼️ BG Image</button>
+          <button onClick={()=>bgFileRef.current?.click()} className={`px-3 py-1.5 rounded text-xs border transition-colors ${bgImage?"bg-green-900/20 border-green-700/40 text-green-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-green-700/30"}`}>🖼️ BG</button>
           <input ref={bgVidRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload}/>
           <button onClick={()=>bgVidRef.current?.click()} className={`px-3 py-1.5 rounded text-xs border transition-colors ${bgVideo?"bg-blue-900/20 border-blue-700/40 text-blue-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-blue-700/30"}`}>🎬 BG Video</button>
           {(bgImage||bgVideo)&&(<><select value={bgObjectFit} onChange={e=>setBgObjectFit(e.target.value as any)} className="px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300"><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select><button onClick={clearBg} className="px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-400 hover:text-red-400">Clear</button></>)}
-          <button onClick={()=>{setShowOverlayPanel(v=>!v);setRightTab("overlay");}} className={`px-3 py-1.5 rounded text-xs border transition-colors ${activeOverlays.length>0?"bg-purple-900/30 border-purple-700/40 text-purple-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-purple-700/30"}`}>🎭 Overlays ({activeOverlays.length})</button>
-          <button onClick={()=>{setShowSoundPanel(v=>!v);setRightTab("sound");}} className={`px-3 py-1.5 rounded text-xs border transition-colors ${activeSounds.length>0?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300 hover:border-green-700/30"}`}>🔊 Sounds ({activeSounds.length})</button>
-          <button onClick={saveProject} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-green-700/30">💾</button>
+          <button onClick={()=>{setShowOverlayPanel(v=>!v);setRightTab("overlay");}} className={`px-3 py-1.5 rounded text-xs border transition-colors ${activeOverlays.length>0?"bg-purple-900/30 border-purple-700/40 text-purple-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300"}`}>🎭 ({activeOverlays.length})</button>
+          <button onClick={()=>{setShowSoundPanel(v=>!v);setRightTab("sound");}} className={`px-3 py-1.5 rounded text-xs border transition-colors ${activeSounds.length>0?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/60 border-zinc-700/30 text-zinc-300"}`}>🔊 ({activeSounds.length})</button>
+          <button onClick={saveProject} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300">💾</button>
           <input ref={loadProjectRef} type="file" accept=".json" className="hidden" onChange={loadProject}/>
-          <button onClick={()=>loadProjectRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 hover:border-yellow-700/30">📂</button>
+          <button onClick={()=>loadProjectRef.current?.click()} className="px-3 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300">📂</button>
           <button onClick={()=>setShowRecordings(v=>!v)} className="ml-auto px-3 py-1.5 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400">📁 ({recordings.length})</button>
         </div>
 
-        {/* Recordings */}
         {showRecordings&&(<div className="mt-2 rounded border border-zinc-800/40 bg-[#06060c] max-h-36 overflow-y-auto flex-shrink-0">
-          {recordings.length===0?<p className="text-xs text-zinc-600 p-3 text-center">No recordings yet</p>:recordings.map((rec,i)=>(<div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/30 hover:bg-zinc-800/20"><div className="flex-1 min-w-0"><div className="text-xs text-zinc-300 truncate">{rec.name}</div><div className="text-[9px] text-zinc-600">{(rec.size/1024/1024).toFixed(1)} MB</div></div><a href={rec.url} download={rec.name} className="px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-400 hover:text-white transition-colors">↓ Download</a></div>))}
+          {recordings.length===0?<p className="text-xs text-zinc-600 p-3 text-center">No recordings</p>:recordings.map((rec,i)=>(<div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/30 hover:bg-zinc-800/20"><div className="flex-1 min-w-0"><div className="text-xs text-zinc-300 truncate">{rec.name}</div><div className="text-[9px] text-zinc-600">{(rec.size/1024/1024).toFixed(1)} MB</div></div><a href={rec.url} download={rec.name} className="px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-400 hover:text-white">↓</a></div>))}
         </div>)}
 
-        {/* ── Overlay Panel ── */}
         {showOverlayPanel&&(
           <div className="mt-2 rounded border border-purple-900/40 bg-[#06060c]/95 flex-shrink-0 max-h-96 overflow-y-auto">
-            {/* Active overlays list */}
             {activeOverlays.length>0&&(
               <div className="p-2 border-b border-zinc-800/30">
-                <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1.5">Active ({activeOverlays.length}) — click to select, drag on canvas to move</div>
+                <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1.5">Active ({activeOverlays.length})</div>
                 <div className="flex flex-wrap gap-1">
                   {activeOverlays.map(ov=>(
                     <div key={ov.instanceId} className={`flex items-center gap-1 px-2 py-1 rounded text-xs border cursor-pointer transition-all ${editingOverlay===ov.instanceId?"bg-purple-900/50 border-purple-700/40 text-purple-300":"border-zinc-800/40 text-zinc-500 hover:text-zinc-300"}`}>
-                      <span onClick={()=>{setEditingOverlay(ov.instanceId===editingOverlay?null:ov.instanceId);setSelectedOverlayInstance(ov.instanceId);}}>{ov.emoji} {ov.label}</span>
-                      <button onClick={()=>removeOverlay(ov.instanceId)} className="text-zinc-600 hover:text-red-400 ml-1">×</button>
+                      <span onClick={()=>setEditingOverlay(ov.instanceId===editingOverlay?null:ov.instanceId)}>{ov.emoji} {ov.label}</span>
+                      <button onClick={()=>removeOverlay(ov.instanceId)} className="text-zinc-600 hover:text-red-400">×</button>
                     </div>))}
                 </div>
               </div>)}
 
-            {/* Overlay editor */}
             {editOv&&(
               <div className="p-3 border-b border-zinc-800/30">
-                <div className="text-[10px] text-purple-300 font-bold uppercase tracking-wider mb-2">{editOv.emoji} {editOv.label} — Edit</div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                  {/* Opacity (always shown) */}
-                  <div className="col-span-2">
-                    <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Overlay Opacity: <span className="text-zinc-300">{Math.round((editOv.opacity??1)*100)}%</span></label>
-                    <input type="range" min={0} max={100} value={Math.round((editOv.opacity??1)*100)} onChange={e=>updateOverlayProp(editOv.instanceId,{opacity:Number(e.target.value)/100})} className="w-full accent-purple-500"/>
-                  </div>
-                  {/* Scale */}
-                  <div>
-                    <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Scale: <span className="text-zinc-300">{(editOv.scale).toFixed(2)}</span></label>
-                    <input type="range" min={0.1} max={3} step={0.05} value={editOv.scale} onChange={e=>updateOverlayProp(editOv.instanceId,{scale:Number(e.target.value)})} className="w-full accent-purple-500"/>
-                  </div>
-                  {/* Rotation */}
-                  <div>
-                    <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Rotation: <span className="text-zinc-300">{Math.round((editOv.rotation||0)*180/Math.PI)}°</span></label>
-                    <input type="range" min={-180} max={180} value={Math.round((editOv.rotation||0)*180/Math.PI)} onChange={e=>updateOverlayProp(editOv.instanceId,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-purple-500"/>
-                  </div>
-                  {/* Video-specific controls */}
-                  {isEditOvVideo?(
-                    <>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Video Opacity: <span className="text-zinc-300">{Math.round((editOv.videoOpacity??1)*100)}%</span></label>
-                        <input type="range" min={0} max={100} value={Math.round((editOv.videoOpacity??1)*100)} onChange={e=>updateOverlayProp(editOv.instanceId,{videoOpacity:Number(e.target.value)/100})} className="w-full accent-blue-500"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Fit Mode</label>
-                        <select value={editOv.videoFit||"cover"} onChange={e=>updateOverlayProp(editOv.instanceId,{videoFit:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-[9px] text-zinc-300">
-                          <option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[9px] text-zinc-500 uppercase">Loop</label>
-                        <button onClick={()=>updateOverlayProp(editOv.instanceId,{videoLoop:!editOv.videoLoop})} className={`px-3 py-0.5 rounded text-xs border ${editOv.videoLoop!==false?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>{editOv.videoLoop!==false?"✓":"✗"}</button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[9px] text-zinc-500 uppercase">Muted</label>
-                        <button onClick={()=>updateOverlayProp(editOv.instanceId,{videoMuted:!editOv.videoMuted})} className={`px-3 py-0.5 rounded text-xs border ${editOv.videoMuted!==false?"bg-orange-900/30 border-orange-700/40 text-orange-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>{editOv.videoMuted!==false?"✓":"✗"}</button>
-                      </div>
-                    </>
-                  ):(
-                    // Particle overlay controls
-                    <>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Count: <span className="text-zinc-300">{editOv.params.count}</span></label>
-                        <input type="range" min={1} max={500} value={editOv.params.count} onChange={e=>updateOverlayParams(editOv.instanceId,{count:Number(e.target.value)})} className="w-full accent-purple-500"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Direction</label>
-                        <select value={editOv.params.direction} onChange={e=>updateOverlayParams(editOv.instanceId,{direction:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-[9px] text-zinc-300">
-                          <option value="top">⬇ From Top</option><option value="bottom">⬆ From Bottom</option><option value="left">➡ From Left</option><option value="right">⬅ From Right</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Min: <span className="text-zinc-300">{editOv.params.sizeMin}</span></label>
-                        <input type="range" min={1} max={300} value={editOv.params.sizeMin} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMin:Number(e.target.value)})} className="w-full accent-purple-500"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Size Max: <span className="text-zinc-300">{editOv.params.sizeMax}</span></label>
-                        <input type="range" min={1} max={400} value={editOv.params.sizeMax} onChange={e=>updateOverlayParams(editOv.instanceId,{sizeMax:Number(e.target.value)})} className="w-full accent-purple-500"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Min: <span className="text-zinc-300">{editOv.params.speedMin}</span></label>
-                        <input type="range" min={0.1} max={30} step={0.1} value={editOv.params.speedMin} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMin:Number(e.target.value)})} className="w-full accent-purple-500"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Speed Max: <span className="text-zinc-300">{editOv.params.speedMax}</span></label>
-                        <input type="range" min={0.1} max={40} step={0.1} value={editOv.params.speedMax} onChange={e=>updateOverlayParams(editOv.instanceId,{speedMax:Number(e.target.value)})} className="w-full accent-purple-500"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Alpha Min: <span className="text-zinc-300">{editOv.params.alphaMin.toFixed(2)}</span></label>
-                        <input type="range" min={0} max={1} step={0.01} value={editOv.params.alphaMin} onChange={e=>updateOverlayParams(editOv.instanceId,{alphaMin:Number(e.target.value)})} className="w-full accent-purple-500"/>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Alpha Max: <span className="text-zinc-300">{editOv.params.alphaMax.toFixed(2)}</span></label>
-                        <input type="range" min={0} max={1} step={0.01} value={editOv.params.alphaMax} onChange={e=>updateOverlayParams(editOv.instanceId,{alphaMax:Number(e.target.value)})} className="w-full accent-purple-500"/>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[9px] text-zinc-500 uppercase">Rotate</label>
-                        <button onClick={()=>updateOverlayParams(editOv.instanceId,{rotate:!editOv.params.rotate})} className={`px-3 py-0.5 rounded text-xs border ${editOv.params.rotate?"bg-green-900/30 border-green-700/40 text-green-300":"bg-zinc-800/40 border-zinc-700/30 text-zinc-400"}`}>{editOv.params.rotate?"✓":"✗"}</button>
-                      </div>
-                    </>
-                  )}
+                <div className="text-[10px] text-purple-300 font-bold uppercase tracking-wider mb-2">{editOv.emoji} {editOv.label}</div>
+                <div className="space-y-2">
+                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Opacity: {Math.round((editOv.opacity??1)*100)}%</label><input type="range" min={0} max={100} value={Math.round((editOv.opacity??1)*100)} onChange={e=>updateOverlayProp(editOv.instanceId,{opacity:Number(e.target.value)/100})} className="w-full accent-purple-500"/></div>
+                  <div><label className="text-[9px] text-zinc-500 uppercase block mb-0.5">Scale: {(editOv.scale).toFixed(2)}</label><input type="range" min={0.1} max={3} step={0.05} value={editOv.scale} onChange={e=>updateOverlayProp(editOv.instanceId,{scale:Number(e.target.value)})} className="w-full accent-purple-500"/></div>
+                  <button onClick={()=>removeOverlay(editOv.instanceId)} className="w-full py-1 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-xs hover:bg-red-900/50">Remove</button>
                 </div>
               </div>)}
 
-            {/* Add overlay */}
             <div className="p-2">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <div className="text-[9px] text-zinc-500 uppercase tracking-wider">Add Overlay</div>
-                <button onClick={()=>setShowAddCustom(v=>!v)} className="px-2 py-0.5 rounded bg-green-900/30 border border-green-700/40 text-green-300 text-[9px] hover:bg-green-900/50">+ Image/GIF</button>
-                <button onClick={()=>{setShowAddCustom(true);setPendingIsVideo(true);setTimeout(()=>customVideoRef.current?.click(),100);}} className="px-2 py-0.5 rounded bg-blue-900/30 border border-blue-700/40 text-blue-300 text-[9px] hover:bg-blue-900/50">+ Video</button>
-              </div>
-
-              {showAddCustom&&(
-                <div className="mb-2 p-2 rounded border border-green-900/40 bg-[#060c06] space-y-2">
-                  <div className="text-[9px] text-green-400 uppercase tracking-wider">{pendingIsVideo?"Add Video Overlay":"Add Image/GIF Overlay"}</div>
-                  <input type="text" placeholder="Name" value={newCustomName} onChange={e=>setNewCustomName(e.target.value)} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-green-700/40"/>
-                  <input type="text" placeholder="Category" value={newCustomCategory} onChange={e=>setNewCustomCategory(e.target.value)} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-green-700/40"/>
-                  <input ref={customUploadRef} type="file" accept="image/*,image/gif,video/*" className="hidden" onChange={handleCustomUpload}/>
-                  <input ref={customVideoRef} type="file" accept="video/*" className="hidden" onChange={handleCustomVideoUpload}/>
-                  <button onClick={()=>customUploadRef.current?.click()} className="w-full py-1.5 rounded bg-zinc-800/60 border border-dashed border-zinc-600/50 text-xs text-zinc-400 hover:border-green-700/40 hover:text-green-400 transition-colors">
-                    {pendingCustomFile?`✅ ${pendingIsVideo?"Video":"Image"} Ready`:"📁 Choose Image, GIF, or Video"}
-                  </button>
-                  {pendingCustomFile&&<div className="flex gap-1">
-                    <button onClick={finalizeCustomOverlay} className="flex-1 py-1 rounded bg-green-900/40 border border-green-700/40 text-green-300 text-xs font-bold">💾 Save & Add</button>
-                    <button onClick={()=>{setPendingCustomFile(null);setShowAddCustom(false);setPendingIsVideo(false);}} className="px-3 py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-500 hover:text-zinc-300">Cancel</button>
-                  </div>}
-                </div>)}
-
-              <div className="flex gap-1 flex-wrap mb-2">
-                {OVERLAY_CATEGORIES.map(cat=>(<button key={cat} onClick={()=>setOverlayCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] border transition-all ${overlayCategory===cat?"bg-purple-900/20 border-purple-700/40 text-purple-300":"border-zinc-800/40 text-zinc-600 hover:text-zinc-300"}`}>{cat}</button>))}
-              </div>
-              <div className="grid grid-cols-3 gap-1 max-h-32 overflow-y-auto">
-                {filteredOverlays.map((o:any)=>(
+              <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-2">Add Overlay</div>
+              <div className="grid grid-cols-3 gap-1">
+                {filteredOverlays.slice(0,9).map((o:any)=>(
                   <button key={o.id} onClick={()=>o.id.startsWith("custom:")?addCustomOverlay(customOverlays.find(c=>`custom:${c.id}`===o.id)!):addOverlay(o.id)} className="px-2 py-1.5 rounded text-[10px] border border-zinc-800/40 text-zinc-500 hover:text-zinc-300 hover:border-purple-700/40 transition-colors">
-                    {o.emoji} {o.label}
+                    {o.emoji}
                   </button>))}
               </div>
             </div>
           </div>)}
 
-        {/* ── Sound Panel ── */}
         {showSoundPanel&&(
-          <div className="mt-2 rounded border border-green-900/40 bg-[#04080a]/95 flex-shrink-0 max-h-96 overflow-y-auto">
-            {/* Active sounds */}
+          <div className="mt-2 rounded border border-green-900/40 bg-[#04080a]/95 flex-shrink-0 max-h-48 overflow-y-auto">
             {activeSounds.length>0&&(
               <div className="p-2 border-b border-zinc-800/30">
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="text-[9px] text-green-400 uppercase tracking-wider">Playing ({activeSounds.length})</div>
-                  <button onClick={stopAllSounds} className="px-2 py-0.5 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-[9px]">⏹ Stop All</button>
-                </div>
-                <div className="space-y-1.5">
-                  {activeSounds.map(s=>(
-                    <div key={s.id} className="flex items-center gap-2 px-2 py-1 rounded bg-green-900/20 border border-green-700/30">
-                      <span className="text-sm">{s.emoji}</span>
-                      <span className="text-[10px] text-green-300 flex-1 truncate">{s.name}</span>
-                      <input type="range" min={0} max={100} value={Math.round(s.volume*100)} onChange={e=>updateSoundVolume(s.id,Number(e.target.value)/100)} className="w-20 accent-green-500"/>
-                      <button onClick={()=>toggleSound(s)} className="text-red-400 hover:text-red-300 text-xs px-1">×</button>
-                    </div>))}
+                  <button onClick={stopAllSounds} className="px-2 py-0.5 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-[9px]">⏹</button>
                 </div>
               </div>)}
-
-            {/* TTS Section */}
-            <div className="p-3 border-b border-zinc-800/30">
-              <div className="text-[10px] text-green-400 uppercase tracking-wider mb-2 font-bold">🗣️ Text-to-Speech</div>
-              <textarea value={ttsText} onChange={e=>setTtsText(e.target.value)} rows={2} className="w-full px-2 py-1.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none focus:border-green-700/40 placeholder:text-zinc-600"/>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="text-[9px] text-zinc-500 block mb-0.5">Voice ({availableVoices.length})</label>
-                  <select value={ttsVoice} onChange={e=>setTtsVoice(e.target.value)} className="w-full px-1.5 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-[10px] text-zinc-300 focus:outline-none focus:border-green-700/40">
-                    {availableVoices.map(v=>(<option key={v.name} value={v.name}>{v.name} ({v.lang})</option>))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[9px] text-zinc-500 block mb-0.5">Rate: {ttsRate.toFixed(1)}</label>
-                  <input type="range" min={0.5} max={2} step={0.1} value={ttsRate} onChange={e=>setTtsRate(Number(e.target.value))} className="w-full accent-green-500"/>
-                </div>
-                <div>
-                  <label className="text-[9px] text-zinc-500 block mb-0.5">Pitch: {ttsPitch.toFixed(1)}</label>
-                  <input type="range" min={0.5} max={2} step={0.1} value={ttsPitch} onChange={e=>setTtsPitch(Number(e.target.value))} className="w-full accent-green-500"/>
-                </div>
-              </div>
-              <button onClick={playTTS} className={`w-full py-1.5 rounded text-xs font-bold border transition-all ${ttsPlaying?"bg-red-900/40 border-red-700/40 text-red-300":"bg-green-900/30 border-green-700/40 text-green-300 hover:bg-green-900/50"}`}>
-                {ttsPlaying?"⏹ Stop TTS":"▶ Speak"}
-              </button>
-            </div>
-
-            {/* Sound Library */}
             <div className="p-2">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] text-green-400 uppercase tracking-wider font-bold">🎵 Sound Library</div>
-                <div className="flex gap-1">
-                  <input ref={soundUploadRef} type="file" accept="audio/*" className="hidden" onChange={handleSoundUpload}/>
-                  <button onClick={()=>soundUploadRef.current?.click()} className="px-2 py-0.5 rounded bg-zinc-800/60 border border-zinc-700/30 text-[9px] text-zinc-400 hover:text-zinc-200">+ Upload</button>
-                </div>
+              <div className="text-[10px] text-green-400 uppercase tracking-wider font-bold">Sound Library</div>
+              <div className="grid grid-cols-3 gap-1 mt-2">
+                {filteredSounds.slice(0,9).map(s=>(
+                  <button key={s.id} onClick={()=>toggleSound(s)} className={`px-2 py-1.5 rounded text-[10px] border transition-all ${activeSounds.some(a=>a.id===s.id)?"bg-green-900/30 border-green-700/40 text-green-300":"border-zinc-800/40 text-zinc-500 hover:text-zinc-300"}`}>
+                    {s.emoji}
+                  </button>))}
               </div>
-              <div className="flex gap-1 flex-wrap mb-2">
-                {soundCategories.map(cat=>(<button key={cat} onClick={()=>setSoundCategory(cat)} className={`px-2 py-0.5 rounded text-[9px] border transition-all ${soundCategory===cat?"bg-green-900/20 border-green-700/40 text-green-300":"border-zinc-800/40 text-zinc-600 hover:text-zinc-300"}`}>{cat}</button>))}
-              </div>
-              <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
-                {filteredSounds.map(s=>{
-                  const isActive=activeSounds.some(a=>a.id===s.id);
-                  const hasAudio=!!(s.dataUrl||s.url);
-                  return(
-                    <button key={s.id} onClick={()=>toggleSound(s)} disabled={!hasAudio&&!s.isCustom} className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] border transition-all ${isActive?"bg-green-900/30 border-green-700/40 text-green-300":"border-zinc-800/40 text-zinc-500 hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed"}`}>
-                      <span className="text-sm">{s.emoji}</span>
-                      <div className="min-w-0">
-                        <div className="truncate">{s.name}</div>
-                        <div className="text-[8px] text-zinc-600">{s.category}{!hasAudio?" (no src)":""}</div>
-                      </div>
-                      {isActive&&<span className="ml-auto text-green-400">▶</span>}
-                    </button>);
-                })}
-              </div>
-              <p className="text-[9px] text-zinc-700 mt-2 leading-relaxed">Upload .mp3/.wav/.ogg files for custom sounds. Built-in sounds require external URLs.</p>
             </div>
           </div>)}
       </div>
 
-      {/* ── Right Sidebar ── */}
       <aside className="w-60 flex-shrink-0 border-l border-red-900/20 bg-[#050508] flex flex-col overflow-y-auto">
-        {/* Tab switcher */}
         <div className="flex border-b border-zinc-800/40">
           {(["text","overlay","sound"] as const).map(tab=>(
             <button key={tab} onClick={()=>setRightTab(tab)} className={`flex-1 py-2 text-[9px] uppercase tracking-wider font-bold transition-colors ${rightTab===tab?"bg-red-900/20 text-red-300 border-b-2 border-red-500/50":"text-zinc-600 hover:text-zinc-300"}`}>
-              {tab==="text"?"✏️ Text":tab==="overlay"?"🎭 Overlay":"🔊 Sound"}
+              {tab==="text"?"✏️":tab==="overlay"?"🎭":"🔊"}
             </button>))}
         </div>
-        <div className="p-3 overflow-y-auto">
-          {/* TEXT TAB */}
+        <div className="p-3 overflow-y-auto flex-1">
           {rightTab==="text"&&sl&&(
             <div className="space-y-3">
-              <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold" style={{fontFamily:"Cinzel"}}>Edit Layer</h2>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Text</label><input type="text" value={sl.text} onChange={e=>updateLayer(sl.id,{text:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none focus:border-red-700/40"/></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Animation ({ALL_ANIMATIONS.length})</label><select value={sl.animation} onChange={e=>updateLayer(sl.id,{animation:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none focus:border-red-700/40"><option>none</option>{ALL_ANIMATIONS.filter(a=>a!=="none").map(a=>(<option key={a} value={a}>{a}</option>))}</select></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Font ({FONT_OPTIONS.length})</label><select value={sl.fontFamily} onChange={e=>updateLayer(sl.id,{fontFamily:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300 focus:outline-none focus:border-red-700/40">{FONT_OPTIONS.map(f=>(<option key={f} value={f}>{f}</option>))}</select></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Font Size: <span className="text-zinc-300">{sl.fontSize}px</span></label><div className="flex items-center gap-2"><input type="range" min={8} max={600} value={sl.fontSize} onChange={e=>updateLayer(sl.id,{fontSize:Number(e.target.value)})} className="flex-1 accent-red-500"/></div></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Style</label><div className="flex gap-1.5">{([{k:"bold",l:"B",c:"font-bold"},{k:"italic",l:"I",c:"italic"},{k:"underline",l:"U",c:"underline"}] as any[]).map(s=>(<button key={s.k} onClick={()=>updateLayer(sl.id,{[s.k]:!(sl as any)[s.k]})} className={`w-7 h-7 rounded border text-xs font-bold transition-all ${(sl as any)[s.k]?"bg-red-900/30 border-red-700/40 text-red-300":"border-zinc-800/40 text-zinc-600 hover:text-zinc-300"}`}>{s.l}</button>))}</div></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Align</label><div className="flex gap-1.5">{(["left","center","right"] as CanvasTextAlign[]).map(a=>(<button key={a} onClick={()=>updateLayer(sl.id,{align:a})} className={`flex-1 h-7 rounded border text-xs font-bold transition-all ${sl.align===a?"bg-red-900/30 border-red-700/40 text-red-300":"border-zinc-800/40 text-zinc-600 hover:text-zinc-300"}`}>{a[0].toUpperCase()}</button>))}</div></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Text Color</label><div className="flex items-center gap-2"><input type="color" value={sl.color} onChange={e=>updateLayer(sl.id,{color:e.target.value})} className="w-12 h-8 rounded border border-zinc-700/30 cursor-pointer"/><span className="text-xs text-zinc-400">{sl.color}</span></div></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Stroke: <span className="text-zinc-300">{sl.strokeWidth}</span></label><div className="flex items-center gap-2"><input type="range" min={0} max={10} step={0.5} value={sl.strokeWidth} onChange={e=>updateLayer(sl.id,{strokeWidth:Number(e.target.value)})} className="flex-1 accent-red-500"/><input type="color" value={sl.strokeColor} onChange={e=>updateLayer(sl.id,{strokeColor:e.target.value})} className="w-8 h-7 rounded border border-zinc-700/30 cursor-pointer"/></div></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Opacity: <span className="text-zinc-300">{Math.round(sl.opacity*100)}%</span></label><input type="range" min={0} max={100} value={Math.round(sl.opacity*100)} onChange={e=>updateLayer(sl.id,{opacity:Number(e.target.value)/100})} className="w-full accent-red-500"/></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Letter Spacing: <span className="text-zinc-300">{sl.letterSpacing}px</span></label><input type="range" min={-5} max={20} value={sl.letterSpacing} onChange={e=>updateLayer(sl.id,{letterSpacing:Number(e.target.value)})} className="w-full accent-red-500"/></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Position Y: <span className="text-zinc-300">{Math.round(sl.y*100)}%</span></label><input type="range" min={0} max={100} value={Math.round(sl.y*100)} onChange={e=>updateLayer(sl.id,{y:Number(e.target.value)/100})} className="w-full accent-red-500"/></div>
-              <div><label className="text-[9px] text-zinc-500 uppercase tracking-wider block mb-1">Rotation: <span className="text-zinc-300">{Math.round(sl.rotation*180/Math.PI)}°</span></label><input type="range" min={-180} max={180} value={Math.round(sl.rotation*180/Math.PI)} onChange={e=>updateLayer(sl.id,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-red-500"/></div>
-              <div className="flex items-center justify-between"><label className="text-[9px] text-zinc-500 uppercase">Shadow</label><button onClick={()=>updateLayer(sl.id,{shadowEnabled:!sl.shadowEnabled})} className={`px-3 py-0.5 rounded text-xs border ${sl.shadowEnabled?"bg-red-900/30 border-red-700/40 text-red-300":"border-zinc-800/40 text-zinc-600"}`}>{sl.shadowEnabled?"✓":"✗"}</button></div>
-              {sl.shadowEnabled&&(<div className="flex items-center gap-2"><input type="color" value={sl.shadowColor} onChange={e=>updateLayer(sl.id,{shadowColor:e.target.value})} className="w-8 h-7 rounded border border-zinc-700/30 cursor-pointer"/><input type="range" min={0} max={30} value={sl.shadowBlur} onChange={e=>updateLayer(sl.id,{shadowBlur:Number(e.target.value)})} className="flex-1 accent-red-500"/></div>)}
-              <div className="flex items-center justify-between"><label className="text-[9px] text-zinc-500 uppercase">Glow</label><button onClick={()=>updateLayer(sl.id,{glowEnabled:!sl.glowEnabled})} className={`px-3 py-0.5 rounded text-xs border ${sl.glowEnabled?"bg-red-900/30 border-red-700/40 text-red-300":"border-zinc-800/40 text-zinc-600"}`}>{sl.glowEnabled?"✓":"✗"}</button></div>
-              {sl.glowEnabled&&(<div className="flex items-center gap-2"><input type="color" value={sl.glowColor} onChange={e=>updateLayer(sl.id,{glowColor:e.target.value})} className="w-8 h-7 rounded border border-zinc-700/30 cursor-pointer"/></div>)}
-              <button onClick={()=>{const f=makeLayer({id:sl.id,text:sl.text,x:sl.x,y:sl.y});setLayers(p=>p.map(l=>l.id===sl.id?f:l));}} className="w-full py-1 rounded bg-zinc-800/40 border border-zinc-700/30 text-xs text-zinc-400 hover:text-zinc-300">↻ Reset Style</button>
-            </div>)}
-          {rightTab==="text"&&!sl&&<p className="text-[10px] text-zinc-600 text-center py-4">Select a text layer to edit</p>}
-
-          {/* OVERLAY TAB */}
-          {rightTab==="overlay"&&(
-            <div className="space-y-3">
-              <h2 className="text-[10px] text-purple-400 uppercase tracking-widest font-bold">Overlay Controls</h2>
-              {selectedOverlayInstance?(()=>{
-                const ov=activeOverlays.find(o=>o.instanceId===selectedOverlayInstance);
-                if(!ov)return <p className="text-[10px] text-zinc-600">Overlay not found</p>;
-                const co=customOverlays.find(c=>`custom:${c.id}`===ov.defId);
-                const isVid=co?.isVideo;
-                return(
-                  <div className="space-y-2">
-                    <div className="text-xs text-purple-300 font-medium">{ov.emoji} {ov.label}</div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Opacity: <span className="text-zinc-300">{Math.round((ov.opacity??1)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.opacity??1)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{opacity:Number(e.target.value)/100})} className="w-full accent-purple-500"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Scale: <span className="text-zinc-300">{ov.scale.toFixed(2)}</span></label><input type="range" min={0.1} max={3} step={0.05} value={ov.scale} onChange={e=>updateOverlayProp(ov.instanceId,{scale:Number(e.target.value)})} className="w-full accent-purple-500"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Rotation: <span className="text-zinc-300">{Math.round((ov.rotation||0)*180/Math.PI)}°</span></label><input type="range" min={-180} max={180} value={Math.round((ov.rotation||0)*180/Math.PI)} onChange={e=>updateOverlayProp(ov.instanceId,{rotation:Number(e.target.value)*Math.PI/180})} className="w-full accent-purple-500"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Pos X: <span className="text-zinc-300">{Math.round((ov.posX||0.5)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.posX||0.5)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{posX:Number(e.target.value)/100})} className="w-full accent-purple-500"/></div>
-                    <div><label className="text-[9px] text-zinc-500 block mb-0.5">Pos Y: <span className="text-zinc-300">{Math.round((ov.posY||0.5)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.posY||0.5)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{posY:Number(e.target.value)/100})} className="w-full accent-purple-500"/></div>
-                    {isVid&&<>
-                      <div><label className="text-[9px] text-zinc-500 block mb-0.5">Video Opacity: <span className="text-zinc-300">{Math.round((ov.videoOpacity??1)*100)}%</span></label><input type="range" min={0} max={100} value={Math.round((ov.videoOpacity??1)*100)} onChange={e=>updateOverlayProp(ov.instanceId,{videoOpacity:Number(e.target.value)/100})} className="w-full accent-blue-500"/></div>
-                      <div><label className="text-[9px] text-zinc-500 block mb-0.5">Fit</label><select value={ov.videoFit||"cover"} onChange={e=>updateOverlayProp(ov.instanceId,{videoFit:e.target.value as any})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-[9px] text-zinc-300"><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select></div>
-                    </>}
-                    <button onClick={()=>removeOverlay(ov.instanceId)} className="w-full py-1 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-xs hover:bg-red-900/50">🗑 Remove Overlay</button>
-                    <p className="text-[9px] text-zinc-600 leading-relaxed">Drag on canvas to reposition. Use scale slider or drag bottom-right handle to resize.</p>
-                  </div>);
-              })():<p className="text-[10px] text-zinc-600 py-4 text-center">Click an overlay on canvas<br/>or select from the Overlays panel below</p>}
-            </div>)}
-
-          {/* SOUND TAB */}
-          {rightTab==="sound"&&(
-            <div className="space-y-2">
-              <h2 className="text-[10px] text-green-400 uppercase tracking-widest font-bold">Soun
+              <h2 className="text-[10px] text-red-400 uppercase tracking-widest font-bold" style={{fontFamily:"Cinzel"}}>Edit Text</h2>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Text</label><input type="text" value={sl.text} onChange={e=>updateLayer(sl.id,{text:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300"/></div>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Animation</label><select value={sl.animation} onChange={e=>updateLayer(sl.id,{animation:e.target.value})} className="w-full px-2 py-1 rounded bg-zinc-800/60 border border-zinc-700/30 text-xs text-zinc-300"><option>none</option>{ALL_ANIMATIONS.filter(a=>a!=="none").slice(0,20).map(a=>(<option key={a}>{a}</option>))}</select></div>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Font Size: {sl.fontSize}px</label><input type="range" min={8} max={600} value={sl.fontSize} onChange={e=>updateLayer(sl.id,{fontSize:Number(e.target.value)})} className="w-full accent-red-500"/></div>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Color</label><input type="color" value={sl.color} onChange={e=>updateLayer(sl.id,{color:e.target.value})} className="w-full h-8 rounded border border-zinc-700/30 cursor-pointer"/></div>
+              <div><label className="text-[9px] text-zinc-500 uppercase block mb-1">Opacity: {Math.round(sl.opacity*100)}%</label><input type="range" min={0} max={100} value={Math.round(sl.opacity*100)} onChange={e=>updateLayer(sl.id,{opacity:Number(e.target.value)/100})} className="w-full accent-red-500"/></div>
+            </div>
+          )}
+          {rightTab==="text"&&!sl&&<p className="text-[10px] text-zinc-600 text-center py-4">Select a text layer</p>}
+        </div>
+      </aside>
+    </div>
+  );
+}
