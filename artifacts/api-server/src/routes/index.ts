@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import aiImagesRouter from "./ai-images";
 import healthRouter from "./health";
 import charactersRouter from "./characters";
 import templatesRouter from "./templates";
