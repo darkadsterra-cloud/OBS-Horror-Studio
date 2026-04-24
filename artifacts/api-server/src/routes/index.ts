@@ -17,5 +17,6 @@ router.use(alertsRouter);
 router.use(presetsRouter);
 router.use(streamRouter);
 router.use(recordingsRouter);
+router.use(aiImagesRouter);
 
 export default router;
