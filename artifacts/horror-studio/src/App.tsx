@@ -10,6 +10,7 @@ import StreamAlerts from "@/pages/StreamAlerts";
 import ImageEditor from "@/pages/ImageEditor";
 import Overlay from "@/pages/Overlay";
 import NotFound from "@/pages/not-found";
+import AIImageGenerator from "./pages/AIImageGenerator";
 
 const queryClient = new QueryClient({
   defaultOptions: {
