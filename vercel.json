@@ -1,7 +1,7 @@
 {
-  "routes": [
-    { "src": "/assets/(.*)", "dest": "/assets/$1" },
-    { "src": "/favicon.svg", "dest": "/favicon.svg" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "buildCommand": "pnpm --filter @workspace/horror-studio build",
+  "outputDirectory": "artifacts/horror-studio/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
