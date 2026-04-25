@@ -84,7 +84,7 @@ export default function AIImageGenerator() {
               <img src={img} className="rounded-xl w-full" alt="generated" />
               
                 href={img}
-                download={true}
+                download="generated.png"
                 className="inline-block mt-4 bg-white text-black px-4 py-2 rounded"
               >
                 Download
