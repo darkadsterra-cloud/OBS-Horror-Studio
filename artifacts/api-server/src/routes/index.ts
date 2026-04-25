@@ -7,6 +7,7 @@ import alertsRouter from "./alerts";
 import presetsRouter from "./presets";
 import streamRouter from "./stream";
 import recordingsRouter from "./recordings";
+import aiImagesRouter from "./ai-images";
 
 const router: IRouter = Router();
 
@@ -17,6 +18,7 @@ router.use(alertsRouter);
 router.use(presetsRouter);
 router.use(streamRouter);
 router.use(recordingsRouter);
-router.use(aiImagesRouter);
+
+router.use("/ai-images", aiImagesRouter);
 
 export default router;
