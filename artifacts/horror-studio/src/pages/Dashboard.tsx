@@ -127,7 +127,7 @@ export default function Dashboard() {
             Live Activity
           </h2>
           <div className="space-y-2 overflow-y-auto max-h-[400px]">
-            {events && events.length > 0 ? (
+           {Array.isArray(events) && events.length > 0 ? (
               events.map((ev) => (
                 <div key={ev.id} className="border-b border-zinc-800/40 pb-2">
                   <div className="flex items-center gap-1.5 mb-0.5">
