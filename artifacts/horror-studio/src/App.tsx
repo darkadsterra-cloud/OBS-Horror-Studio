@@ -1,3 +1,4 @@
+import AIImageGenerator from "./pages/AIImageGenerator";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,7 +11,7 @@ import StreamAlerts from "@/pages/StreamAlerts";
 import ImageEditor from "@/pages/ImageEditor";
 import Overlay from "@/pages/Overlay";
 import NotFound from "@/pages/not-found";
-import AIImageGenerator from "./pages/AIImageGenerator";
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +31,16 @@ function Router() {
       <Route path="/text-animator" component={() => <Layout><TextAnimator /></Layout>} />
       <Route path="/stream-alerts" component={() => <Layout><StreamAlerts /></Layout>} />
       <Route path="/image-editor" component={() => <Layout><ImageEditor /></Layout>} />
+      
+<Route
+ path="/image-generator"
+ component={() => (
+  <Layout>
+    <AIImageGenerator />
+  </Layout>
+ )}
+/>
+      
       <Route component={NotFound} />
     </Switch>
   );
