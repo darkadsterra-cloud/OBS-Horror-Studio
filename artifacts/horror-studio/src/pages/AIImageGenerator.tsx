@@ -81,10 +81,10 @@ export default function AIImageGenerator() {
         <div className="grid md:grid-cols-2 gap-8 mt-12">
           {images.map((img, i) => (
             <div key={i}>
-              <img src={img} className="rounded-xl w-full" />
+              <img src={img} className="rounded-xl w-full" alt="generated" />
               
                 href={img}
-                download
+                download={true}
                 className="inline-block mt-4 bg-white text-black px-4 py-2 rounded"
               >
                 Download
