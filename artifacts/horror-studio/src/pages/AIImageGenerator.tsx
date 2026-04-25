@@ -33,6 +33,13 @@ export default function AIImageGenerator() {
     setLoading(false);
   };
 
+  const downloadImage = (url: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "generated.png";
+    a.click();
+  };
+
   return (
     <div className="min-h-screen bg-black text-white p-8">
       <h1 className="text-4xl font-bold mb-8">AI Character Scene Generator</h1>
@@ -82,13 +89,12 @@ export default function AIImageGenerator() {
           {images.map((img, i) => (
             <div key={i}>
               <img src={img} className="rounded-xl w-full" alt="generated" />
-              
-                href={img}
-                download="generated.png"
-                className="inline-block mt-4 bg-white text-black px-4 py-2 rounded"
+              <button
+                onClick={() => downloadImage(img)}
+                className="mt-4 bg-white text-black px-4 py-2 rounded"
               >
                 Download
-              </a>
+              </button>
             </div>
           ))}
         </div>
