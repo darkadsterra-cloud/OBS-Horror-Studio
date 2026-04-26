@@ -61,14 +61,11 @@ export default function AIImageGenerator() {
           body.input.prompt_strength = 0.8;
         }
 
-        const res = await fetch("https://api.replicate.com/v1/predictions", {
-          method: "POST",
-          headers: {
-            Authorization: `Token ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-        });
+       const res = await fetch("/api/generate", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
 
         const prediction = await res.json();
         if (!prediction.id) throw new Error("Prediction nahi bana");
