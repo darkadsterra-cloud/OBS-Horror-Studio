@@ -8,8 +8,8 @@ const NAV_ITEMS = [
   { path: "/stream-alerts", label: "Stream Alerts", icon: "◆" },
   { path: "/image-editor", label: "Image Editor", icon: "◧" },
   { path: "/image-generator", label: "AI Image Generator", icon: "◑" },
+  { path: "/local-generator", label: "Local Generator ⚡", icon: "⚡" },
 ];
-
 export default function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
