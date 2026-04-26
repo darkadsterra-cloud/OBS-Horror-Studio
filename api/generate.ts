@@ -3,9 +3,15 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  const apiKey = (globalThis as any).process?.env?.REPLICATE_API_KEY || "";
+  // Edge runtime mein env vars directly milte hain
+  const apiKey = (process as any).env.REPLICATE_API_KEY || 
+                 (globalThis as any).REPLICATE_API_KEY || "";
+
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: "API key missing" }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: "API key missing", env: Object.keys((process as any).env || {}) }), 
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 
   const body = await req.json();
@@ -21,6 +27,7 @@ export default async function handler(req: Request): Promise<Response> {
 
   const data = await res.json();
   return new Response(JSON.stringify(data), {
+    status: res.status,
     headers: { "Content-Type": "application/json" },
   });
 }
