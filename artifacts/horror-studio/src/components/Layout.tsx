@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { path: "/text-animator", label: "Text Animator", icon: "◎" },
   { path: "/stream-alerts", label: "Stream Alerts", icon: "◆" },
   { path: "/image-editor", label: "Image Editor", icon: "◧" },
+  { path: "/image-generator", label: "AI Image Generator", icon: "◑" },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {
