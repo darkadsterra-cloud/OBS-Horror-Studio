@@ -34,8 +34,8 @@ export default function AIImageGenerator() {
 
   try {
     const results: string[] = [];
-    for (let i = 0; i < 4; i++) {
-      const res = await fetch("/api/generate", {
+for (let i = 0; i < 1; i++) {
+    const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -154,7 +154,7 @@ export default function AIImageGenerator() {
             disabled={loading}
             className="w-full py-3 rounded bg-red-700 hover:bg-red-600 disabled:bg-zinc-800 disabled:text-zinc-600 font-bold text-sm transition-all"
           >
-            {loading ? "Generating... (this takes ~2 min)" : "Generate 4 Images"}
+{loading ? "Generating..." : "Generate Image"}
           </button>
 
           {error && (
