@@ -126,7 +126,6 @@ export default function LocalGenerator() {
       let workflow: any;
 
       if (mode === "image") {
-        // Image generation workflow
         workflow = {
           "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "sd_xl_base_1.0.safetensors" } },
           "2": { class_type: "CLIPTextEncode", inputs: { text: prompt, clip: ["1", 1] } },
@@ -137,7 +136,6 @@ export default function LocalGenerator() {
           "7": { class_type: "SaveImage", inputs: { filename_prefix: "horror-studio", images: ["6", 0] } },
         };
       } else {
-        // Video workflow — basic wan2.1 t2v
         workflow = {
           "1": {
             class_type: "UNETLoader",
@@ -216,11 +214,9 @@ export default function LocalGenerator() {
 
       setProgressMsg("ComfyUI pe generate ho raha hai...");
 
-      // Poll
       for (let i = 0; i < 300; i++) {
         await new Promise((r) => setTimeout(r, 2000));
 
-        // Queue check
         const qRes = await fetch(`${serverUrl}/queue`);
         const qData = await qRes.json();
         const running = qData.queue_running || [];
@@ -276,12 +272,12 @@ export default function LocalGenerator() {
   return (
     <div className="h-full overflow-y-auto bg-[#04040a] text-white">
       {/* Header */}
-      <div className="border-b border-purple-900/30 px-6 py-3 flex items-center justify-between bg-[#06060e]">
+      <div className="border-b border-purple-900/30 px-6 py-4 flex items-center justify-between bg-[#06060e]">
         <div>
           <h1 className="text-xl font-black text-purple-400" style={{ fontFamily: "Cinzel" }}>
             LOCAL AI STUDIO
           </h1>
-          <p className="text-[10px] text-zinc-600">RTX 5070 — ComfyUI Local Server</p>
+          <p className="text-xs text-zinc-600">RTX 5070 — ComfyUI Local Server</p>
         </div>
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-red-500"}`} />
@@ -294,8 +290,8 @@ export default function LocalGenerator() {
         <div className="col-span-3 space-y-3">
 
           {/* Server */}
-          <div className="rounded border border-purple-900/40 bg-purple-900/10 p-3">
-            <label className="text-[9px] text-purple-400 uppercase tracking-widest block mb-1.5">Server URL</label>
+          <div className="rounded border border-purple-900/40 bg-purple-900/10 p-4">
+            <label className="text-xs text-purple-400 uppercase tracking-widest block mb-1.5">Server URL</label>
             <input
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
@@ -306,7 +302,7 @@ export default function LocalGenerator() {
             <button
               onClick={testConnection}
               disabled={connecting}
-              className={`w-full py-1.5 rounded text-xs font-bold border transition-all ${
+              className={`w-full py-2 rounded text-xs font-bold border transition-all ${
                 connected
                   ? "bg-green-900/40 border-green-700 text-green-300"
                   : "bg-purple-900/30 border-purple-700 text-purple-300 hover:bg-purple-900/50"
@@ -317,14 +313,14 @@ export default function LocalGenerator() {
           </div>
 
           {/* Mode */}
-          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-3">
-            <label className="text-[9px] text-zinc-500 uppercase tracking-widest block mb-2">Generation Mode</label>
+          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-4">
+            <label className="text-xs text-zinc-500 uppercase tracking-widest block mb-2">Generation Mode</label>
             <div className="grid grid-cols-3 gap-1">
               {(["t2v", "i2v", "image"] as const).map((m) => (
                 <button
                   key={m}
                   onClick={() => setMode(m)}
-                  className={`py-1.5 rounded text-[10px] font-bold border transition-all ${
+                  className={`py-2 rounded text-xs font-bold border transition-all ${
                     mode === m
                       ? "bg-purple-900/50 border-purple-600 text-purple-300"
                       : "bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500"
@@ -337,35 +333,35 @@ export default function LocalGenerator() {
           </div>
 
           {/* Model */}
-          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-3">
-            <label className="text-[9px] text-zinc-500 uppercase tracking-widest block mb-2">Model</label>
+          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-4">
+            <label className="text-xs text-zinc-500 uppercase tracking-widest block mb-2">Model</label>
             <div className="space-y-1">
               {MODELS.filter(m => mode === "image" || m.type === mode || mode === "t2v").map((m) => (
                 <button
                   key={m.id}
                   onClick={() => setSelectedModel(m)}
-                  className={`w-full text-left px-2 py-1.5 rounded text-[10px] border transition-all ${
+                  className={`w-full text-left px-2 py-2 rounded text-xs border transition-all ${
                     selectedModel.id === m.id
                       ? "bg-blue-900/40 border-blue-600 text-blue-300"
                       : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600"
                   }`}
                 >
                   <div className="font-bold">{m.label}</div>
-                  <div className="text-[9px] opacity-60">{m.desc}</div>
+                  <div className="text-xs opacity-60">{m.desc}</div>
                 </button>
               ))}
             </div>
           </div>
 
           {/* Aspect Ratio */}
-          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-3">
-            <label className="text-[9px] text-zinc-500 uppercase tracking-widest block mb-2">Aspect Ratio</label>
+          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-4">
+            <label className="text-xs text-zinc-500 uppercase tracking-widest block mb-2">Aspect Ratio</label>
             <div className="grid grid-cols-5 gap-1">
               {ASPECT_RATIOS.map((ar) => (
                 <button
                   key={ar.label}
                   onClick={() => setAspectRatio(ar)}
-                  className={`py-1.5 rounded text-[10px] border transition-all flex flex-col items-center gap-0.5 ${
+                  className={`py-2 rounded text-xs border transition-all flex flex-col items-center gap-0.5 ${
                     aspectRatio.label === ar.label
                       ? "bg-cyan-900/40 border-cyan-600 text-cyan-300"
                       : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600"
@@ -376,7 +372,7 @@ export default function LocalGenerator() {
                 </button>
               ))}
             </div>
-            <div className="text-[9px] text-zinc-600 mt-1 text-center">{aspectRatio.w} × {aspectRatio.h}</div>
+            <div className="text-xs text-zinc-600 mt-1 text-center">{aspectRatio.w} × {aspectRatio.h}</div>
           </div>
         </div>
 
@@ -384,8 +380,8 @@ export default function LocalGenerator() {
         <div className="col-span-5 space-y-3">
 
           {/* Prompt */}
-          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-3">
-            <label className="text-[9px] text-zinc-500 uppercase tracking-widest block mb-1.5">Prompt</label>
+          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-4">
+            <label className="text-xs text-zinc-500 uppercase tracking-widest block mb-1.5">Prompt</label>
             <textarea
               rows={5}
               value={prompt}
@@ -393,7 +389,7 @@ export default function LocalGenerator() {
               placeholder="A cinematic scene of a dark forest, fog rolling in, horror atmosphere, dramatic lighting..."
               className="w-full p-2 rounded bg-zinc-900 border border-zinc-700 text-sm focus:outline-none focus:border-purple-700 resize-none"
             />
-            <label className="text-[9px] text-zinc-500 uppercase tracking-widest block mb-1.5 mt-2">Negative Prompt</label>
+            <label className="text-xs text-zinc-500 uppercase tracking-widest block mb-1.5 mt-2">Negative Prompt</label>
             <textarea
               rows={2}
               value={negativePrompt}
@@ -405,8 +401,8 @@ export default function LocalGenerator() {
           {/* Start / End Image */}
           {(mode === "i2v") && (
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-3">
-                <label className="text-[9px] text-zinc-500 uppercase tracking-widest block mb-2">Start Image</label>
+              <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-4">
+                <label className="text-xs text-zinc-500 uppercase tracking-widest block mb-2">Start Image</label>
                 <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "start")} className="hidden" id="start-img" />
                 <label htmlFor="start-img" className="block cursor-pointer">
                   {startImagePreview ? (
@@ -418,11 +414,11 @@ export default function LocalGenerator() {
                   )}
                 </label>
                 {startImagePreview && (
-                  <button onClick={() => { setStartImage(null); setStartImagePreview(null); }} className="w-full mt-1 text-[9px] text-red-400">Remove</button>
+                  <button onClick={() => { setStartImage(null); setStartImagePreview(null); }} className="w-full mt-1 text-xs text-red-400">Remove</button>
                 )}
               </div>
-              <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-3">
-                <label className="text-[9px] text-zinc-500 uppercase tracking-widest block mb-2">End Image (optional)</label>
+              <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-4">
+                <label className="text-xs text-zinc-500 uppercase tracking-widest block mb-2">End Image (optional)</label>
                 <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "end")} className="hidden" id="end-img" />
                 <label htmlFor="end-img" className="block cursor-pointer">
                   {endImagePreview ? (
@@ -434,44 +430,44 @@ export default function LocalGenerator() {
                   )}
                 </label>
                 {endImagePreview && (
-                  <button onClick={() => { setEndImage(null); setEndImagePreview(null); }} className="w-full mt-1 text-[9px] text-red-400">Remove</button>
+                  <button onClick={() => { setEndImage(null); setEndImagePreview(null); }} className="w-full mt-1 text-xs text-red-400">Remove</button>
                 )}
               </div>
             </div>
           )}
 
           {/* Settings */}
-          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-3 grid grid-cols-2 gap-3">
+          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-4 grid grid-cols-2 gap-3">
             {mode !== "image" && (
               <>
                 <div>
-                  <label className="text-[9px] text-zinc-500 uppercase tracking-widest block mb-1">Duration: <span className="text-zinc-300">{duration}s</span></label>
+                  <label className="text-xs text-zinc-500 uppercase tracking-widest block mb-1">Duration: <span className="text-zinc-300">{duration}s</span></label>
                   <div className="flex gap-1 flex-wrap">
                     {DURATIONS.map((d) => (
-                      <button key={d} onClick={() => setDuration(d)} className={`px-2 py-0.5 rounded text-[9px] border ${duration === d ? "bg-purple-900/40 border-purple-600 text-purple-300" : "border-zinc-700 text-zinc-500"}`}>{d}s</button>
+                      <button key={d} onClick={() => setDuration(d)} className={`px-2 py-1 rounded text-xs border ${duration === d ? "bg-purple-900/40 border-purple-600 text-purple-300" : "border-zinc-700 text-zinc-500"}`}>{d}s</button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <label className="text-[9px] text-zinc-500 uppercase tracking-widest block mb-1">FPS: <span className="text-zinc-300">{fps}</span></label>
+                  <label className="text-xs text-zinc-500 uppercase tracking-widest block mb-1">FPS: <span className="text-zinc-300">{fps}</span></label>
                   <div className="flex gap-1">
                     {FPS_OPTIONS.map((f) => (
-                      <button key={f} onClick={() => setFps(f)} className={`px-2 py-0.5 rounded text-[9px] border ${fps === f ? "bg-cyan-900/40 border-cyan-600 text-cyan-300" : "border-zinc-700 text-zinc-500"}`}>{f}</button>
+                      <button key={f} onClick={() => setFps(f)} className={`px-2 py-1 rounded text-xs border ${fps === f ? "bg-cyan-900/40 border-cyan-600 text-cyan-300" : "border-zinc-700 text-zinc-500"}`}>{f}</button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <label className="text-[9px] text-zinc-500 block mb-1">Motion: <span className="text-zinc-300">{motionStrength.toFixed(1)}</span></label>
+                  <label className="text-xs text-zinc-500 block mb-1">Motion: <span className="text-zinc-300">{motionStrength.toFixed(1)}</span></label>
                   <input type="range" min={0.1} max={1} step={0.1} value={motionStrength} onChange={(e) => setMotionStrength(Number(e.target.value))} className="w-full accent-purple-600" />
                 </div>
               </>
             )}
             <div>
-              <label className="text-[9px] text-zinc-500 block mb-1">Steps: <span className="text-zinc-300">{steps}</span></label>
+              <label className="text-xs text-zinc-500 block mb-1">Steps: <span className="text-zinc-300">{steps}</span></label>
               <input type="range" min={4} max={50} value={steps} onChange={(e) => setSteps(Number(e.target.value))} className="w-full accent-purple-600" />
             </div>
             <div>
-              <label className="text-[9px] text-zinc-500 block mb-1">Guidance: <span className="text-zinc-300">{guidanceScale.toFixed(1)}</span></label>
+              <label className="text-xs text-zinc-500 block mb-1">Guidance: <span className="text-zinc-300">{guidanceScale.toFixed(1)}</span></label>
               <input type="range" min={1} max={15} step={0.5} value={guidanceScale} onChange={(e) => setGuidanceScale(Number(e.target.value))} className="w-full accent-cyan-600" />
             </div>
           </div>
@@ -494,7 +490,7 @@ export default function LocalGenerator() {
 
           {/* Progress */}
           {loading && (
-            <div className="rounded border border-purple-900/40 bg-purple-900/10 p-3">
+            <div className="rounded border border-purple-900/40 bg-purple-900/10 p-4">
               <div className="flex justify-between mb-1">
                 <span className="text-xs text-purple-300">{progressMsg}</span>
                 <span className="text-xs text-purple-400">{progress}%</span>
@@ -506,19 +502,19 @@ export default function LocalGenerator() {
           )}
 
           {error && (
-            <div className="p-3 rounded border border-red-700 bg-red-900/20 text-red-300 text-xs">{error}</div>
+            <div className="p-4 rounded border border-red-700 bg-red-900/20 text-red-300 text-xs">{error}</div>
           )}
         </div>
 
         {/* RIGHT PANEL — Output */}
         <div className="col-span-4">
-          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-3 h-full flex flex-col">
+          <div className="rounded border border-zinc-800/40 bg-zinc-900/20 p-4 h-full flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <label className="text-[9px] text-zinc-500 uppercase tracking-widest">Output</label>
+              <label className="text-xs text-zinc-500 uppercase tracking-widest">Output</label>
               {(outputVideo || outputImages.length > 0) && (
                 <button
                   onClick={downloadOutput}
-                  className="px-3 py-1 rounded bg-green-900/40 border border-green-700 text-green-300 text-xs font-bold hover:bg-green-900/60"
+                  className="px-3 py-2 rounded bg-green-900/40 border border-green-700 text-green-300 text-xs font-bold hover:bg-green-900/60"
                 >
                   ↓ Download
                 </button>
@@ -536,7 +532,7 @@ export default function LocalGenerator() {
                   className="w-full rounded border border-zinc-700"
                   style={{ maxHeight: "400px" }}
                 />
-                <div className="text-[9px] text-zinc-600 text-center">
+                <div className="text-xs text-zinc-600 text-center">
                   {aspectRatio.w}×{aspectRatio.h} · {duration}s · {fps}fps
                 </div>
               </div>
@@ -576,3 +572,4 @@ export default function LocalGenerator() {
     </div>
   );
 }
+
