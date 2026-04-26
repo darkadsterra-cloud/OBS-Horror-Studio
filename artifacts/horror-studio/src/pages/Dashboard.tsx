@@ -35,6 +35,28 @@ const TOOLS = [
     textColor: "text-cyan-400",
     bgColor: "bg-cyan-900/10",
   },
+  {
+    path: "/image-generator",
+    icon: "◑",
+    title: "AI Image Generator",
+    desc: "Generate cinematic AI images with style presets — Horror, Cyberpunk, Superhero and more",
+    color: "red",
+    borderColor: "border-red-800/40",
+    glowColor: "rgba(220,20,60,0.3)",
+    textColor: "text-red-400",
+    bgColor: "bg-red-900/10",
+  },
+  {
+    path: "/local-generator",
+    icon: "⚡",
+    title: "Local AI Studio",
+    desc: "RTX 5070 powered image & video generation — unlimited, free, via your local ComfyUI server",
+    color: "purple",
+    borderColor: "border-purple-800/40",
+    glowColor: "rgba(139,0,255,0.3)",
+    textColor: "text-purple-400",
+    bgColor: "bg-purple-900/10",
+  },
 ];
 
 const EVENT_COLORS: Record<string, string> = {
@@ -127,7 +149,7 @@ export default function Dashboard() {
             Live Activity
           </h2>
           <div className="space-y-2 overflow-y-auto max-h-[400px]">
-           {Array.isArray(events) && events.length > 0 ? (
+            {Array.isArray(events) && events.length > 0 ? (
               events.map((ev) => (
                 <div key={ev.id} className="border-b border-zinc-800/40 pb-2">
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -156,3 +178,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
