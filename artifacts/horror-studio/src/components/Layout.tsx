@@ -9,7 +9,11 @@ const NAV_ITEMS = [
   { path: "/image-editor", label: "Image Editor", icon: "◧" },
   { path: "/image-generator", label: "AI Image Generator", icon: "◑" },
   { path: "/local-generator", label: "Local Generator ⚡", icon: "⚡" },
+  { path: "/ollama-chat", label: "Ollama AI Chat", icon: "🤖" },
+  { path: "/voice-generator", label: "AI Voice Generator", icon: "🎙️" },
+  { path: "/pinokio-launcher", label: "Pinokio Launcher", icon: "🚀" },
 ];
+
 export default function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
