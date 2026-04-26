@@ -38,7 +38,7 @@ function Router() {
       <Route path="/local-generator" component={() => <Layout><LocalGenerator /></Layout>} />
       <Route path="/ollama-chat" component={() => <Layout><OllamaChat /></Layout>} />
       <Route path="/voice-generator" component={() => <Layout><VoiceGenerator /></Layout>} />
-      <Route path="/pinokio" component={() => <Layout><PinokioLauncher /></Layout>} />
+      <Route path="/pinokio-launcher" component={() => <Layout><PinokioLauncher /></Layout>} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -58,4 +58,3 @@ function App() {
 }
 
 export default App;
-
