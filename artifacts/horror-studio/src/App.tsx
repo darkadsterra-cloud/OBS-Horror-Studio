@@ -1,5 +1,8 @@
 import AIImageGenerator from "./pages/AIImageGenerator";
 import LocalGenerator from "./pages/LocalGenerator";
+import OllamaChat from "./pages/OllamaChat";
+import VoiceGenerator from "./pages/VoiceGenerator";
+import PinokioLauncher from "./pages/PinokioLauncher";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -33,6 +36,9 @@ function Router() {
       <Route path="/image-editor" component={() => <Layout><ImageEditor /></Layout>} />
       <Route path="/image-generator" component={() => <Layout><AIImageGenerator /></Layout>} />
       <Route path="/local-generator" component={() => <Layout><LocalGenerator /></Layout>} />
+      <Route path="/ollama-chat" component={() => <Layout><OllamaChat /></Layout>} />
+      <Route path="/voice-generator" component={() => <Layout><VoiceGenerator /></Layout>} />
+      <Route path="/pinokio" component={() => <Layout><PinokioLauncher /></Layout>} />
       <Route component={NotFound} />
     </Switch>
   );
