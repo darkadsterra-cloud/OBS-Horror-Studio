@@ -40,7 +40,7 @@ export default function AIImageGenerator() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: `${prompt}, ${style}`,
-          negative_prompt: negativePrompt,
+          index: i,
         }),
       });
 
