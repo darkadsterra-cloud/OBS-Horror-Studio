@@ -26,64 +26,37 @@ export default function AIImageGenerator() {
       reader.readAsDataURL(file);
     });
 
-  const generateImages = async () => {
-    if (!prompt.trim()) return alert("Prompt likho pehle!");
-    setLoading(true);
-    setError("");
-    setImages([]);
+ const generateImages = async () => {
+  if (!prompt.trim()) return alert("Prompt likho pehle!");
+  setLoading(true);
+  setError("");
+  setImages([]);
 
-    const fullPrompt = `${prompt}, ${style}`;
+  try {
+    const results: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: `${prompt}, ${style}`,
+          negative_prompt: negativePrompt,
+        }),
+      });
 
-    try {
-      const results: string[] = [];
-      for (let i = 0; i < 4; i++) {
-        const body: any = {
-          version: "ac732df83cea7fff18b8472768c88ad041fa750ed7461c4c5c8f9b79c1fde0c8",
-          input: {
-            prompt: fullPrompt,
-            negative_prompt: negativePrompt,
-            num_inference_steps: 28,
-            guidance_scale: 7.5,
-            width: 768,
-            height: 768,
-          },
-        };
-
-        if (referenceImage) {
-          body.input.image = `data:image/jpeg;base64,${referenceImage}`;
-          body.input.prompt_strength = 0.8;
-        }
-
-       const res = await fetch("/api/generate", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-});
-
-        const prediction = await res.json();
-        if (!prediction.id) throw new Error("Prediction nahi bana");
-
-        let output = null;
-        for (let attempt = 0; attempt < 60; attempt++) {
-          await new Promise((r) => setTimeout(r, 2000));
-         const poll = await fetch(`/api/poll?id=${prediction.id}`);
-          const data = await poll.json();
-          if (data.status === "succeeded") {
-            output = data.output?.[0];
-            break;
-          }
-          if (data.status === "failed") throw new Error("Generation fail hui");
-        }
-
-        if (output) results.push(output);
+      const data = await res.json();
+      if (data.output && data.output.length > 0) {
+        results.push(data.output[0]);
+        setImages([...results]);
+      } else if (data.error) {
+        throw new Error(data.error);
       }
-      setImages(results);
-    } catch (err: any) {
-      setError(err.message || "Kuch error aayi");
     }
-    setLoading(false);
-  };
-
+  } catch (err: any) {
+    setError(err.message || "Kuch error aayi");
+  }
+  setLoading(false);
+};
   const downloadImage = async (url: string, index: number) => {
     const res = await fetch(url);
     const blob = await res.blob();
