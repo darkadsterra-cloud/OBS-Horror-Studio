@@ -3,7 +3,8 @@ export default async function handler(req: Request): Promise<Response> {
   const id = url.searchParams.get("id");
   if (!id) return new Response("Missing id", { status: 400 });
 
-  const apiKey = (globalThis as any).process?.env?.REPLICATE_API_KEY || "";
+  const apiKey = (process as any).env.REPLICATE_API_KEY || 
+                 (globalThis as any).REPLICATE_API_KEY || "";
 
   const res = await fetch(`https://api.replicate.com/v1/predictions/${id}`, {
     headers: { Authorization: `Token ${apiKey}` },
