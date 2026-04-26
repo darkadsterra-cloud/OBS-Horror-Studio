@@ -39,8 +39,10 @@ export default function StreamAlerts() {
   const wsRef = useRef<WebSocket | null>(null);
   const animFrameRef = useRef<number>(0);
 
-  const { data: alerts = [] } = useListAlerts();
-  const { data: events = [] } = useGetRecentEvents();
+  const { data: alertsRaw } = useListAlerts();
+  const alerts = Array.isArray(alertsRaw) ? alertsRaw : [];
+  const { data: eventsRaw } = useGetRecentEvents();
+  const events = Array.isArray(eventsRaw) ? eventsRaw : [];
   const createAlert = useCreateAlert();
   const updateAlert = useUpdateAlert();
   const deleteAlert = useDeleteAlert();
