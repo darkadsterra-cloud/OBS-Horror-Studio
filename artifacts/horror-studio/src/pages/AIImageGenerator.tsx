@@ -39,9 +39,11 @@ export default function AIImageGenerator() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: `${prompt}, ${style}`,
-          index: i,
-        }),
+  prompt: referenceImage 
+    ? `${prompt}, ${style}, character reference consistency, same person`
+    : `${prompt}, ${style}`,
+  index: i,
+}),
       });
 
       const data = await res.json();
@@ -174,7 +176,18 @@ export default function AIImageGenerator() {
             <div className="grid grid-cols-2 gap-4">
               {images.map((img, i) => (
                 <div key={i} className="rounded-xl overflow-hidden border border-zinc-800 group relative">
-                  <img src={img} className="w-full object-cover" alt={`Generated ${i + 1}`} />
+<img 
+  src={img} 
+  className="w-full object-cover" 
+  alt={`Generated ${i + 1}`}
+  onError={(e) => {
+    (e.target as HTMLImageElement).src = "";
+  }}
+  onLoad={(e) => {
+    (e.target as HTMLImageElement).style.opacity = "1";
+  }}
+  style={{opacity: 0.5, transition: "opacity 0.3s"}}
+/>
                   <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => downloadImage(img, i)}
