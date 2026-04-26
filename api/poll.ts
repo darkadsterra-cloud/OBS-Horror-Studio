@@ -1,11 +1,9 @@
-export const config = { runtime: "edge" };
-
-export default async function handler(req: Request) {
+export default async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const id = url.searchParams.get("id");
   if (!id) return new Response("Missing id", { status: 400 });
 
-  const apiKey = process.env.REPLICATE_API_KEY;
+  const apiKey = (globalThis as any).process?.env?.REPLICATE_API_KEY || "";
 
   const res = await fetch(`https://api.replicate.com/v1/predictions/${id}`, {
     headers: { Authorization: `Token ${apiKey}` },
@@ -16,3 +14,5 @@ export default async function handler(req: Request) {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export const config = { runtime: "edge" };
