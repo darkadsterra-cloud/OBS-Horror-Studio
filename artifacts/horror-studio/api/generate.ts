@@ -20,11 +20,17 @@ export default async function handler(req: Request): Promise<Response> {
 
   if (!res.ok) {
     const err = await res.text();
-    return new Response(JSON.stringify({ error: err }), { status: res.status, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: err }), {
+      status: res.status,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   const imageBuffer = await res.arrayBuffer();
-  const base64 = Buffer.from(imageBuffer).toString("base64");
+  const uint8 = new Uint8Array(imageBuffer);
+  let binary = "";
+  uint8.forEach((b) => { binary += String.fromCharCode(b); });
+  const base64 = btoa(binary);
   const dataUrl = `data:image/jpeg;base64,${base64}`;
 
   return new Response(JSON.stringify({ output: [dataUrl] }), {
