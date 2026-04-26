@@ -32,13 +32,6 @@ export default function AIImageGenerator() {
     setError("");
     setImages([]);
 
-    const apiKey = import.meta.env.VITE_REPLICATE_API_KEY;
-    if (!apiKey) {
-      setError("API key nahi mili. Vercel mein VITE_REPLICATE_API_KEY set karo.");
-      setLoading(false);
-      return;
-    }
-
     const fullPrompt = `${prompt}, ${style}`;
 
     try {
@@ -73,10 +66,7 @@ export default function AIImageGenerator() {
         let output = null;
         for (let attempt = 0; attempt < 60; attempt++) {
           await new Promise((r) => setTimeout(r, 2000));
-          const poll = await fetch(
-            `https://api.replicate.com/v1/predictions/${prediction.id}`,
-            { headers: { Authorization: `Token ${apiKey}` } }
-          );
+         const poll = await fetch(`/api/poll?id=${prediction.id}`);
           const data = await poll.json();
           if (data.status === "succeeded") {
             output = data.output?.[0];
